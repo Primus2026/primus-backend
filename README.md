@@ -32,3 +32,19 @@ primus-backend/
     *   **services/**: Business logic and DB interactions.
     *   **models/**: Pydantic schemas ONLY.
     *   **database/**: SQLAlchemy models ONLY.
+
+## Running Locally
+
+### Option 1: Docker (Recommended)
+Run the entire stack from the `primus-infra` directory:
+```bash
+cd ../primus-infra
+docker compose up --build
+```
+
+### Option 2: Standalone (Dev)
+Requires running Postgres/Redis separately.
+```bash
+poetry install
+poetry run uvicorn app.main:app --reload
+```
