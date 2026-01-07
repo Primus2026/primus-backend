@@ -1,11 +1,12 @@
 import pytest
-from datetime import date, datetime
+from datetime import date
 from app.models.product_definition import ProductDefinition
 from app.models.stock_item import StockItem
 from app.models.rack import Rack
 from app.models.user import User, UserRole
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.models.alert import Alert, AlertType
 
 @pytest.mark.asyncio
 async def test_create_product_definition(db_session: AsyncSession):
@@ -94,7 +95,7 @@ async def test_create_stock_item_relationship(db_session: AsyncSession):
     assert fetched_item.rack_id == rack.id
     assert fetched_item.received_by_id == user.id
 
-from app.models.alert import Alert, AlertType
+
 
 @pytest.mark.asyncio
 async def test_create_alert_with_weight(db_session: AsyncSession):
