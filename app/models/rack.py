@@ -16,5 +16,7 @@ class Rack(Base):
     max_dims_y_mm: Mapped[int] = mapped_column(Integer)
     max_dims_z_mm: Mapped[int] = mapped_column(Integer)
     comment: Mapped[str] = mapped_column(Text, nullable=True)
+    distance_from_exit_m: Mapped[float] = mapped_column(Float, nullable=True)
+
 
     items = relationship("StockItem", back_populates="rack")

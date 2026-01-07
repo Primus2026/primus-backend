@@ -1,6 +1,6 @@
 from enum import Enum
 from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, Text, DateTime, ForeignKey, Enum as SQLAlchemyEnum
+from sqlalchemy import Integer, String, Boolean, Text, DateTime, ForeignKey, Enum as SQLAlchemyEnum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
@@ -21,6 +21,8 @@ class Alert(Base):
     message: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_valid_weight: Mapped[float] = mapped_column(Float, nullable=True)
+
 
     rack = relationship("Rack")
     product = relationship("ProductDefinition")

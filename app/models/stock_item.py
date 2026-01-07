@@ -22,5 +22,5 @@ class StockItem(Base):
     receiver = relationship("User")
 
     __table_args__ = (
-        UniqueConstraint('rack_id', 'position_row', 'position_col', name='_rack_position_uc'),
+        UniqueConstraint('rack_id', 'position_row', 'position_col', name='unique_rack_position'),
     )
