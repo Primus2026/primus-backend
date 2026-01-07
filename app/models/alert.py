@@ -10,6 +10,7 @@ class AlertType(str, Enum):
     WEIGHT = 'WEIGHT'
     EXPIRY = 'EXPIRY'
     THEFT = 'THEFT'
+    EXPIRY_WARNING = 'EXPIRY_WARNING'
 
 class Alert(Base):
     __tablename__ = 'alerts'
@@ -22,6 +23,7 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     last_valid_weight: Mapped[float] = mapped_column(Float, nullable=True)
+    is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
     rack = relationship("Rack")
