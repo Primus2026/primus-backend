@@ -1,0 +1,115 @@
+"""initial_revision
+
+Revision ID: 0b149ce3f394
+Revises: 
+Create Date: 2026-01-07 20:50:11.463167
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = '0b149ce3f394'
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    op.create_table('product_definitions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('barcode', sa.String(length=50), nullable=False),
+    sa.Column('photo_path', sa.String(length=255), nullable=True),
+    sa.Column('req_temp_min', sa.Float(), nullable=False),
+    sa.Column('req_temp_max', sa.Float(), nullable=False),
+    sa.Column('weight_kg', sa.Float(), nullable=False),
+    sa.Column('dims_x_mm', sa.Integer(), nullable=False),
+    sa.Column('dims_y_mm', sa.Integer(), nullable=False),
+    sa.Column('dims_z_mm', sa.Integer(), nullable=False),
+    sa.Column('is_dangerous', sa.Boolean(), nullable=False),
+    sa.Column('expiry_days', sa.Integer(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_product_definitions_barcode'), 'product_definitions', ['barcode'], unique=True)
+    op.create_index(op.f('ix_product_definitions_id'), 'product_definitions', ['id'], unique=False)
+    op.create_table('racks',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('designation', sa.String(length=20), nullable=False),
+    sa.Column('rows_m', sa.Integer(), nullable=False),
+    sa.Column('cols_n', sa.Integer(), nullable=False),
+    sa.Column('temp_min', sa.Float(), nullable=False),
+    sa.Column('temp_max', sa.Float(), nullable=False),
+    sa.Column('max_weight_kg', sa.Float(), nullable=False),
+    sa.Column('max_dims_x_mm', sa.Integer(), nullable=False),
+    sa.Column('max_dims_y_mm', sa.Integer(), nullable=False),
+    sa.Column('max_dims_z_mm', sa.Integer(), nullable=False),
+    sa.Column('comment', sa.Text(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_racks_designation'), 'racks', ['designation'], unique=True)
+    op.create_index(op.f('ix_racks_id'), 'racks', ['id'], unique=False)
+    op.create_table('users',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('login', sa.String(length=50), nullable=False),
+    sa.Column('email', sa.String(length=100), nullable=False),
+    sa.Column('password_hash', sa.String(length=255), nullable=False),
+    sa.Column('role', sa.Enum('ADMIN', 'WAREHOUSEMAN', name='userrole'), nullable=False),
+    sa.Column('totp_secret', sa.String(length=32), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
+    op.create_index(op.f('ix_users_login'), 'users', ['login'], unique=True)
+    op.create_table('alerts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('alert_type', sa.Enum('TEMP', 'WEIGHT', 'EXPIRY', 'THEFT', 'EXPIRY_WARNING', name='alerttype'), nullable=False),
+    sa.Column('rack_id', sa.Integer(), nullable=True),
+    sa.Column('product_id', sa.Integer(), nullable=True),
+    sa.Column('message', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('is_resolved', sa.Boolean(), nullable=False),
+    sa.Column('last_valid_weight', sa.Float(), nullable=True),
+    sa.Column('is_sent', sa.Boolean(), server_default='false', nullable=False),
+    sa.ForeignKeyConstraint(['product_id'], ['product_definitions.id'], ),
+    sa.ForeignKeyConstraint(['rack_id'], ['racks.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_alerts_id'), 'alerts', ['id'], unique=False)
+    op.create_table('stock_items',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('product_id', sa.Integer(), nullable=False),
+    sa.Column('rack_id', sa.Integer(), nullable=False),
+    sa.Column('position_row', sa.Integer(), nullable=False),
+    sa.Column('position_col', sa.Integer(), nullable=False),
+    sa.Column('entry_date', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('expiry_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('received_by_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['product_id'], ['product_definitions.id'], ),
+    sa.ForeignKeyConstraint(['rack_id'], ['racks.id'], ),
+    sa.ForeignKeyConstraint(['received_by_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('rack_id', 'position_row', 'position_col', name='_rack_position_uc')
+    )
+    op.create_index(op.f('ix_stock_items_id'), 'stock_items', ['id'], unique=False)
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    op.drop_index(op.f('ix_stock_items_id'), table_name='stock_items')
+    op.drop_table('stock_items')
+    op.drop_index(op.f('ix_alerts_id'), table_name='alerts')
+    op.drop_table('alerts')
+    op.drop_index(op.f('ix_users_login'), table_name='users')
+    op.drop_index(op.f('ix_users_id'), table_name='users')
+    op.drop_table('users')
+    op.drop_index(op.f('ix_racks_id'), table_name='racks')
+    op.drop_index(op.f('ix_racks_designation'), table_name='racks')
+    op.drop_table('racks')
+    op.drop_index(op.f('ix_product_definitions_id'), table_name='product_definitions')
+    op.drop_index(op.f('ix_product_definitions_barcode'), table_name='product_definitions')
+    op.drop_table('product_definitions')
