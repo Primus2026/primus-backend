@@ -9,7 +9,6 @@ class AlertType(str, Enum):
     TEMP = 'TEMP'
     WEIGHT = 'WEIGHT'
     EXPIRY = 'EXPIRY'
-    THEFT = 'THEFT'
     EXPIRY_WARNING = 'EXPIRY_WARNING'
 
 class Alert(Base):

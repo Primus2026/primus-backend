@@ -16,4 +16,4 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(SQLAlchemyEnum(UserRole))
     totp_secret: Mapped[str] = mapped_column(String(32), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

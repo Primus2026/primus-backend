@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 
 from app.main import app
 from app.database.session import get_db
-from app.models.base import Base
+from app.database.models.base import Base
 
 # Use in-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
