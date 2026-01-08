@@ -11,6 +11,21 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
+    ENVIRONMENT: str = "local"
+    ENABLE_DOCS: bool = True
+
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        extra="ignore"
+    )
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.ENVIRONMENT == "production":
+            self.ENABLE_DOCS = False
+
 
 
 settings = Settings()
