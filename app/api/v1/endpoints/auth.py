@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
@@ -14,8 +14,8 @@ router = APIRouter()
 
 @router.post("/login", response_model=Token)
 async def login_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests
@@ -30,16 +30,16 @@ async def login_access_token(
 
 @router.post("/2fa/setup")
 async def setup_2fa(
-    current_user: Annotated[User, Depends(deps.get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    current_user: User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(get_db)
 ) -> Any:
     return await AuthService.setup_2fa(db, current_user)
 
 @router.post("/2fa/verify")
 async def verify_2fa_setup(
-    code: Annotated[str, Body(embed=True)],
-    current_user: Annotated[User, Depends(deps.get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    code: str = Body(..., embed=True),
+    current_user: User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(get_db)
 ) -> Any:
     """
     Verify the code to ENABLE 2FA.
@@ -52,9 +52,9 @@ async def verify_2fa_setup(
 
 @router.post("/2fa/login", response_model=Token)
 async def login_2fa(
-    token: Annotated[str, Body()],
-    code: Annotated[str, Body()],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    token: str = Body(...),
+    code: str = Body(...),
+    db: AsyncSession = Depends(get_db)
 ) -> Any:
     """
     Complete login with 2FA code using the temp token from /login.
@@ -63,6 +63,6 @@ async def login_2fa(
 
 @router.get("/me")
 async def read_users_me(
-    current_user: Annotated[User, Depends(deps.get_current_user)]
+    current_user: User = Depends(deps.get_current_user)
 ):
     return {"id": current_user.id, "login": current_user.login, "email": current_user.email, "is_2fa_enabled": current_user.is_2fa_enabled}

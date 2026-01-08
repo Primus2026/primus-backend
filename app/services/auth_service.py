@@ -16,6 +16,7 @@ from app.database.models.user import User
 from app.models.token import Token
 
 class AuthService:
+
     @staticmethod
     async def authenticate_user(db: AsyncSession, username: str, password: str) -> User | None:
         result = await db.execute(select(User).where(User.login == username))
@@ -39,6 +40,9 @@ class AuthService:
             user.id, expires_delta=access_token_expires
         )
         return Token(access_token=access_token, token_type="bearer", is_2fa_required=False)
+
+
+    #--------------------------- 2FA setup process ---------------------------
 
     @staticmethod
     async def setup_2fa(db: AsyncSession, user: User) -> dict[str, str]:
@@ -74,6 +78,10 @@ class AuthService:
         db.add(user)
         await db.commit()
         return True
+
+
+
+    #--------------------------- 2FA login process ---------------------------
 
     @staticmethod
     async def login_2fa(db: AsyncSession, token: str, code: str) -> Token:
