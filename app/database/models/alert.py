@@ -9,7 +9,6 @@ class AlertType(str, Enum):
     TEMP = 'TEMP'
     WEIGHT = 'WEIGHT'
     EXPIRY = 'EXPIRY'
-    THEFT = 'THEFT'
     EXPIRY_WARNING = 'EXPIRY_WARNING'
 
 class Alert(Base):
@@ -24,6 +23,8 @@ class Alert(Base):
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     last_valid_weight: Mapped[float] = mapped_column(Float, nullable=True)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    position_row: Mapped[int] = mapped_column(Integer, nullable=True)
+    position_col: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
     rack = relationship("Rack")
