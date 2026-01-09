@@ -42,9 +42,15 @@ cd ../primus-infra
 docker compose up --build
 ```
 
-### Option 2: Standalone (Dev)
+### Option 2: Standalone
 Requires running Postgres/Redis separately.
 ```bash
 poetry install
 poetry run uvicorn app.main:app --reload
 ```
+
+# Running alembic migrations
+```bash
+docker compose exec backend alembic revision --autogenerate -m "<description>"
+```
+Db upgrade automaticaly on docker compose up

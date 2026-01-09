@@ -23,8 +23,8 @@ class Alert(Base):
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     last_valid_weight: Mapped[float] = mapped_column(Float, nullable=True)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    x: Mapped[int] = mapped_column(Integer, nullable=True)
-    y: Mapped[int] = mapped_column(Integer, nullable=True)
+    position_row: Mapped[int] = mapped_column(Integer, nullable=True)
+    position_col: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
     rack = relationship("Rack")
