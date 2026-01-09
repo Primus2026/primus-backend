@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.database.session import get_db
-from app.database.models.user import User
+from app.database.models.user import User, UserRole
 from app.models.token import TokenPayload
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
@@ -43,5 +43,13 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+async def get_current_admin(
+        current_user: User = Depends(get_current_user)
+    ) -> User:
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        return current_user
+    
 
 
