@@ -8,7 +8,7 @@ from app.database.models import User
 
 router = APIRouter()
 
-@router.post("/request_register")
+@router.post("/request_register", status_code=201)
 async def request_register(
     user: UserIn,
     db: AsyncSession = Depends(get_db)

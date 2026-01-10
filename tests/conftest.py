@@ -2,6 +2,8 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from typing import AsyncGenerator
+from app.database.models import User, UserRole
+from app.core import security
 
 from app.main import app
 from app.database.session import get_db
@@ -26,9 +28,15 @@ async def db_engine():
 
 @pytest.fixture
 async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
-    async with TestingSessionLocal() as session:
+    connection = await engine.connect()
+    trans = await connection.begin()
+    
+    async with TestingSessionLocal(bind=connection) as session:
         yield session
+        await session.close()
 
+    await trans.rollback()
+    await connection.close()
 @pytest.fixture
 async def async_client(db_session) -> AsyncGenerator[AsyncClient, None]:
     # Override the get_db dependency to use the test session
@@ -41,3 +49,46 @@ async def async_client(db_session) -> AsyncGenerator[AsyncClient, None]:
         yield client
     
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def admin_token(db_session: AsyncSession) -> str:
+    """Creates admin in database and returns his token"""
+    admin = User(
+        login="test_admin",
+        email="admin@test.pl",
+        password_hash=security.get_password_hash("test_pass"),
+        role=UserRole.ADMIN,
+        is_active=True 
+    )
+    db_session.add(admin)
+    await db_session.commit()
+    await db_session.refresh(admin)
+
+    return security.create_access_token(admin.id)
+
+@pytest.fixture
+async def warehouseman_token(db_session: AsyncSession) -> str:
+    """Creates warehouseman and returns his token"""
+    user = User(
+        login="test_worker",
+        email="worker@test.pl",
+        password_hash=security.get_password_hash("test_pass"),
+        role=UserRole.WAREHOUSEMAN,
+        is_active=True
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    
+    return security.create_access_token(user.id)
+
+@pytest.fixture
+async def authorized_admin_client(async_client: AsyncClient, admin_token: str) -> AsyncClient:
+    async_client.headers.update({"Authorization": f"Bearer {admin_token}"})
+    return async_client
+
+@pytest.fixture
+async def authorized_warehouseman_client(async_client: AsyncClient, warehouseman_token: str) -> AsyncClient:
+    async_client.headers.update({"Authorization": f"Bearer {warehouseman_token}"})
+    return async_client
