@@ -128,3 +128,43 @@ async def test_delete_user_success(authorized_admin_client: AsyncClient, db_sess
     
     result = await db_session.execute(select(User).where(User.id == rej_id))
     assert result.scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_get_me_success(authorized_warehouseman_client: AsyncClient):
+    """
+    Testuje, czy zalogowany użytkownik (magazynier) może pobrać swoje dane.
+    Zakładamy, że fixture authorized_warehouseman_client tworzy użytkownika o loginie 'test_user'.
+    """
+    response = await authorized_warehouseman_client.get(f"{BASE_URL}/me")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "login" in data
+    assert "email" in data
+    assert data["role"] == "WAREHOUSEMAN"
+    # Opcjonalnie: sprawdź konkretny login, jeśli Twoja fixture go definiuje
+    # assert data["login"] == "warehouseman_user"
+
+@pytest.mark.asyncio
+async def test_get_me_admin_success(authorized_admin_client: AsyncClient):
+    """
+    Testuje, czy zalogowany administrator może pobrać swoje dane.
+    """
+    response = await authorized_admin_client.get(f"{BASE_URL}/me")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["role"] == "ADMIN"
+    assert data["is_active"] is True
+
+@pytest.mark.asyncio
+async def test_get_me_unauthorized(async_client: AsyncClient):
+    """
+    Testuje próbę dostępu do /me bez tokena JWT.
+    """
+    response = await async_client.get(f"{BASE_URL}/me")
+    
+    # Fastapi/Pydantic rzuci 401 Unauthorized, jeśli zależy od Depends(deps.get_current_user)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
