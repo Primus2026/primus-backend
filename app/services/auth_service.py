@@ -12,7 +12,7 @@ from jose import jwt, JWTError
 from app.core import security
 from app.core.config import settings
 from app.database.models.user import User
-from app.models.token import Token
+from app.schemas.token import Token
 
 class AuthService:
 

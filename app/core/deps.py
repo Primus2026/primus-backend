@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.database.session import get_db
 from app.database.models.user import User, UserRole
-from app.models.token import TokenPayload
+from app.schemas.token import TokenPayload
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
