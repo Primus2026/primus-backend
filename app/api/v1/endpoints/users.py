@@ -45,3 +45,9 @@ async def reject_user(
         db=db,
         user_id=user_id
     )
+
+@router.get("/me") 
+async def get_me(
+    current_user: User = Depends(deps.get_current_user)
+):
+    return current_user
