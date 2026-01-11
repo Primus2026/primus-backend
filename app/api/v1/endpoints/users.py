@@ -109,6 +109,7 @@ async def get_me(
         "email": current_user.email,
         "role": current_user.role,
         "is_2fa_enabled": current_user.is_2fa_enabled,
+        "is_active": current_user.is_active,
     }
 
 @router.get("/warehouse_workers", summary="Gets all warehouse workers",

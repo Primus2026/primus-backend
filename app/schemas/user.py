@@ -12,3 +12,4 @@ class UserOut(BaseModel):
     email: str 
     role: str 
     is_2fa_enabled: bool 
+    is_active: bool 

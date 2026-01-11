@@ -25,6 +25,8 @@ class AuthService:
         user = result.scalars().first()
         if not user or not security.verify_password(password, user.password_hash):
             return None
+        if user.is_active == False:
+            raise HTTPException(status_code=401, detail="Inactive user")
         return user
 
     @staticmethod

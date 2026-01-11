@@ -23,7 +23,7 @@ router = APIRouter()
     "/login",
     response_model=Token,
     summary="Login user",
-    responses={400: {"description": "Incorrect login or password"}},
+    responses={400: {"description": "Incorrect login or password"}, 401: {"description": "Inactive user"}},
 )
 async def login_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
