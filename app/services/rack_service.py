@@ -103,63 +103,74 @@ class RackService:
         existing_result = await db.execute(select(Rack))
         existing_racks = {r.designation: r for r in existing_result.scalars().all()}
         
-        # Identify New vs Updates
+        # Identify New vs Updates and Collect IDs for Bulk Stats
         total_updates_attempted = 0
         conflicts_count = 0
         
+        # Collect IDs of racks being updated to fetch their stats in bulk
+        update_rack_ids = [existing_racks[r.designation].id for r in rows if r.designation in existing_racks]
+        
+        # Bulk Fetch Stats
+        rack_stats_map = {}
+        
+        if update_rack_ids:
+            stats_query = select(
+                StockItem.rack_id,
+                func.sum(ProductDefinition.weight_kg),
+                func.max(ProductDefinition.dims_x_mm),
+                func.max(ProductDefinition.dims_y_mm),
+                func.max(ProductDefinition.dims_z_mm),
+                func.max(ProductDefinition.req_temp_min),
+                func.min(ProductDefinition.req_temp_max)  
+            ).join(StockItem, StockItem.product_id == ProductDefinition.id)\
+             .where(StockItem.rack_id.in_(update_rack_ids))\
+             .group_by(StockItem.rack_id)
+             
+            stats_result = await db.execute(stats_query)
+            for s_row in stats_result.all():
+                # s_row = (rack_id, weight, x, y, z, min_t, max_t)
+                rack_stats_map[s_row[0]] = s_row[1:]
+
         for row in rows:
             if row.designation in existing_racks:
                 rack = existing_racks[row.designation]
                 total_updates_attempted += 1
                 
-                # Check collisions with Aggregate Query (Optimization)
-                # We fetch the stats of current items in one go:
-                # - Total Weight
-                # - Max Dimensions (x, y, z)
-                # - Temp Constraints (Highest Min, Lowest Max)
+                # Check collisions using Bulk Map
+                stats = rack_stats_map.get(rack.id)
                 
-                stats_query = select(
-                    func.sum(ProductDefinition.weight_kg),
-                    func.max(ProductDefinition.dims_x_mm),
-                    func.max(ProductDefinition.dims_y_mm),
-                    func.max(ProductDefinition.dims_z_mm),
-                    func.max(ProductDefinition.req_temp_min),
-                    func.min(ProductDefinition.req_temp_max)  
-                ).join(StockItem, StockItem.product_id == ProductDefinition.id).where(StockItem.rack_id == rack.id)
-
-                stats_result = await db.execute(stats_query)
-                curr_weight, curr_max_x, curr_max_y, curr_max_z, min_temp, max_temp = stats_result.one()
-
-                # If there are items (curr_weight will be not None)
-                if curr_weight is not None:
-                    conflict_reasons = []
+                # If there are items (stats found)
+                if stats:
+                    curr_weight, curr_max_x, curr_max_y, curr_max_z, min_temp, max_temp = stats
                     
-                    # Weight Check
-                    if row.max_weight < curr_weight:
-                        conflict_reasons.append(f"New max weight {row.max_weight}kg < current load {curr_weight}kg")
-                    
-                    # Dimensions Check (The rack must fit the largest item)
-                    # Note: We compare max item dimension to max rack dimension on same axis. 
-                    if row.max_width < curr_max_x:
-                        conflict_reasons.append(f"New width {row.max_width}mm < item width {curr_max_x}mm")
-                    if row.max_height < curr_max_y:
-                        conflict_reasons.append(f"New height {row.max_height}mm < item height {curr_max_y}mm")
-                    if row.max_depth < curr_max_z:
-                         conflict_reasons.append(f"New depth {row.max_depth}mm < item depth {curr_max_z}mm")
-
-                    # Temp Check
-                    if min_temp is not None:
-                        if row.temp_min < min_temp: 
-                             conflict_reasons.append(f"New temp min {row.temp_min} < item min req {min_temp}")
+                    if curr_weight is not None:
+                        conflict_reasons = []
                         
-                        if row.temp_max > max_temp:
-                             conflict_reasons.append(f"New temp max {row.temp_max} > item max req {max_temp}")
+                        # Weight Check
+                        if row.max_weight < curr_weight:
+                            conflict_reasons.append(f"New max weight {row.max_weight}kg < current load {curr_weight}kg")
+                        
+                        # Dimensions Check
+                        if row.max_width < curr_max_x:
+                            conflict_reasons.append(f"New width {row.max_width}mm < item width {curr_max_x}mm")
+                        if row.max_height < curr_max_y:
+                            conflict_reasons.append(f"New height {row.max_height}mm < item height {curr_max_y}mm")
+                        if row.max_depth < curr_max_z:
+                            conflict_reasons.append(f"New depth {row.max_depth}mm < item depth {curr_max_z}mm")
 
-                    if conflict_reasons:
-                        conflicts_count += 1
-                        summary.skipped_count += 1
-                        summary.skipped_details.append(f"Rack {row.designation}: {'; '.join(conflict_reasons)}")
-                        continue # Skip this update
+                        # Temp Check
+                        if min_temp is not None:
+                            if row.temp_min < min_temp: 
+                                conflict_reasons.append(f"New temp min {row.temp_min} < item min req {min_temp}")
+                            
+                            if row.temp_max > max_temp:
+                                conflict_reasons.append(f"New temp max {row.temp_max} > item max req {max_temp}")
+
+                        if conflict_reasons:
+                            conflicts_count += 1
+                            summary.skipped_count += 1
+                            summary.skipped_details.append(f"Rack {row.designation}: {'; '.join(conflict_reasons)}")
+                            continue # Skip this update
                 
                 valid_updates.append((rack, row))
             else:
