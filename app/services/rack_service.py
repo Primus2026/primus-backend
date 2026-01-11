@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
 from app.database.models.rack import Rack
-from app.api.v1.schemas.rack import RackCreate, RackUpdate
+from app.schemas.rack import RackCreate, RackUpdate
 
 from app.database.models.stock_item import StockItem
 from app.database.models.product_definition import ProductDefinition

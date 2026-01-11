@@ -3,11 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.database.models.user import User
 from app.core import deps
-from app.api.v1.schemas.rack import RackCreate, RackUpdate, RackOut
+from app.schemas.rack import RackCreate, RackUpdate, RackOut
 from app.schemas.csv_import import ImportResult
 from app.services.rack_service import RackService
 
-router = APIRouter(prefix="/racks", tags=["Racks"])
+router = APIRouter()
 
 @router.post("/", response_model=RackOut)
 async def create_rack(
