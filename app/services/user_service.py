@@ -134,3 +134,22 @@ class UserService:
             
         return {"message": "User deleted successfully"}
         
+    @staticmethod 
+    async def get_all_warehouse_workers(db: AsyncSession):
+        result = await db.execute(
+            select(User).where(
+                User.is_active == True,
+                User.role == UserRole.WAREHOUSEMAN
+            )
+        )
+        return result.scalars().all()
+    
+    @staticmethod
+    async def get_not_active_users(db: AsyncSession):
+        result =  await db.execute(
+            select(User).where(
+                User.is_active == False,
+                User.role == UserRole.WAREHOUSEMAN
+            )
+        )
+        return result.scalars().all()
