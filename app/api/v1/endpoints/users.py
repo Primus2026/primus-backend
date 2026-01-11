@@ -6,7 +6,7 @@ from app.database.session import get_db
 from app.services.user_service import UserService
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models import User
-
+from typing import List
 router = APIRouter()
 
 
@@ -110,3 +110,25 @@ async def get_me(
         "role": current_user.role,
         "is_2fa_enabled": current_user.is_2fa_enabled,
     }
+
+@router.get("/warehouse_workers", summary="Gets all warehouse workers",
+             response_model=List[UserOut]
+             )
+async def get_all_warehouse_workers(
+    current_admin: User = Depends(deps.get_current_admin),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    """
+    return await UserService.get_all_warehouse_workers(db)
+
+@router.get("/requests", summary="Gets all users signup requests"
+            , response_model=List[UserOut]
+            )
+async def get_all_warehouse_workers(
+    current_admin: User = Depends(deps.get_current_admin),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    """
+    return await UserService.get_not_active_users(db)

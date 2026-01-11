@@ -149,7 +149,7 @@ class UserService:
         result =  await db.execute(
             select(User).where(
                 User.is_active == False,
-                User.role == UserRole.WAREHOUSEMAN
+                User.role == UserRole.WAREHOUSEMAN 
             )
         )
         return result.scalars().all()
