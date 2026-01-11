@@ -31,3 +31,17 @@ class RackUpdate(BaseModel):
     max_dims_z_mm: Optional[int] = None
     comment: Optional[str] = None
     distance_from_exit_m: Optional[float] = None
+
+class RackOut(BaseModel):
+    id: int
+    designation: str
+    rows_m: int
+    cols_n: int
+    temp_min: float
+    temp_max: float
+    max_weight_kg: float
+    max_dims_x_mm: int
+    max_dims_y_mm: int
+    max_dims_z_mm: int
+    comment: Optional[str] = None
+    distance_from_exit_m: Optional[float] = None
