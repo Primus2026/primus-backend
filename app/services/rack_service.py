@@ -87,7 +87,7 @@ class RackService:
             for row_dict in reader:
                 # Filter out None/empty keys if any
                 clean_row = {k: v for k, v in row_dict.items() if k}
-                rows.append(RackCSVRow(**clean_row))
+                rows.append(RackCSVRow.model_validate(clean_row))
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"CSV Parsing Error: {str(e)}")
 
