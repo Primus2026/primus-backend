@@ -23,8 +23,8 @@ class RackService:
         return new_rack
 
     @staticmethod
-    async def update_rack(db: AsyncSession, rack: RackUpdate) -> Rack:      
-        updatedRack = await db.get(Rack, rack.id)
+    async def update_rack(db: AsyncSession, rack_id: int, rack: RackUpdate) -> Rack:      
+        updatedRack = await db.get(Rack, rack_id)
         if not updatedRack:
             raise HTTPException(status_code=404, detail="Rack not found")
 
@@ -36,13 +36,18 @@ class RackService:
             if same_designation:
                 raise HTTPException(status_code=400, detail="Rack with this designation already exists")
         
-        update_data = rack.dict(exclude_unset=True)
+        update_data = rack.model_dump(exclude_unset=True)
         # Remove id from update data to avoid overwriting it (though usually it's excluded or safe)
         if 'id' in update_data:
             del update_data['id']
 
         for key, value in update_data.items():
             setattr(updatedRack, key, value)
+
+        # Validate business rules
+        if updatedRack.temp_min is not None and updatedRack.temp_max is not None:
+            if updatedRack.temp_min > updatedRack.temp_max:
+                raise HTTPException(status_code=400, detail="temp_min cannot be greater than temp_max")
 
         await db.commit()
         await db.refresh(updatedRack)

@@ -92,12 +92,13 @@ async def get_import_result(
     
 
 
-@router.patch("/", response_model=RackOut, responses={
+@router.put("/{rack_id}", response_model=RackOut, responses={
     404: {"description": "Rack not found"},
     400: {"description": "Rack with this designation already exists"}
 })
 async def update_rack(
     rack: RackUpdate,
+    rack_id: int = Path(...),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(deps.get_current_admin),
 ): 
@@ -106,7 +107,7 @@ async def update_rack(
     
     Can only be executed by an admin user.
     """
-    return await RackService.update_rack(db, rack)
+    return await RackService.update_rack(db, rack_id, rack)
 
 @router.delete("/{rack_id}", responses={
     404: {"description": "Rack not found"},
@@ -130,7 +131,7 @@ async def delete_rack(
     404: {"description": "Rack not found"}
 })
 async def get_rack(
-    rack_id: int,
+    rack_id: int = Path(...),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(deps.get_current_admin),
 ): 

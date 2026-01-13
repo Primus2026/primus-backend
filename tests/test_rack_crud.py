@@ -118,7 +118,7 @@ async def test_update_rack_success(
         "comment": "Updated Comment"
     }
     
-    response = await authorized_admin_client.patch("/api/v1/racks/", json=payload)
+    response = await authorized_admin_client.put(f"/api/v1/racks/{rack.id}", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["designation"] == "R-UPDATED"
@@ -198,3 +198,58 @@ async def test_delete_rack_not_empty(
     response = await authorized_admin_client.delete(f"/api/v1/racks/{rack.id}")
     assert response.status_code == 400
     assert "Rack has items" in response.json().get("detail", "")
+
+@pytest.mark.asyncio
+async def test_create_rack_invalid_data(
+    authorized_admin_client: AsyncClient,
+    db_session: AsyncSession
+):
+    """Test validation errors for RackCreate."""
+    # 1. Invalid temperature range (min > max)
+    payload_temp = {
+        "designation": "R-TEMP-FAIL",
+        "max_weight_kg": 1000, "max_dims_x_mm": 1000, "max_dims_y_mm": 1000, "max_dims_z_mm": 1000,
+        "temp_min": 30, "temp_max": 20, # Invalid
+        "rows_m": 5, "cols_n": 5
+    }
+    response = await authorized_admin_client.post("/api/v1/racks/", json=payload_temp)
+    assert response.status_code == 422 # Pydantic Validation Error
+
+    # 2. Negative values
+    payload_neg = {
+        "designation": "R-NEG-FAIL",
+        "max_weight_kg": -100, # Invalid
+        "max_dims_x_mm": 1000, "max_dims_y_mm": 1000, "max_dims_z_mm": 1000,
+        "temp_min": 10, "temp_max": 20,
+        "rows_m": 5, "cols_n": 5
+    }
+    response = await authorized_admin_client.post("/api/v1/racks/", json=payload_neg)
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_update_rack_validation(
+    authorized_admin_client: AsyncClient,
+    db_session: AsyncSession
+):
+    """Test validation errors for RackUpdate."""
+    # Create valid rack first
+    rack = Rack(
+        designation="R-VAL-UPDATE",
+        max_weight_kg=1000, max_dims_x_mm=1000, max_dims_y_mm=1000, max_dims_z_mm=1000,
+        temp_min=10, temp_max=20,
+        rows_m=5, cols_n=5
+    )
+    db_session.add(rack)
+    await db_session.commit()
+
+    # 1. Partial update resulting in invalid temp range (Service Layer Check)
+    # Existing: min=10, max=20. Update max=5 -> min=10 > max=5 (Invalid)
+    payload_temp = {"temp_max": 5}
+    response = await authorized_admin_client.put(f"/api/v1/racks/{rack.id}", json=payload_temp)
+    assert response.status_code == 400
+    assert "temp_min cannot be greater than temp_max" in response.json()["detail"]
+
+    # 2. Negative value update (Pydantic Check)
+    payload_neg = {"distance_from_exit_m": -10}
+    response = await authorized_admin_client.put(f"/api/v1/racks/{rack.id}", json=payload_neg)
+    assert response.status_code == 422
