@@ -11,6 +11,11 @@ from sqlalchemy import func
 class RackService:
     @staticmethod
     async def create_rack(db: AsyncSession, rack: RackCreate) -> Rack:
+        # Check if rack with same designation already exists
+        result = await db.execute(select(Rack).where(Rack.designation == rack.designation))
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Rack with this designation already exists")
+
         new_rack = Rack(**rack.dict())
         db.add(new_rack)
         await db.commit()

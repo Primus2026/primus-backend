@@ -76,7 +76,7 @@ async def get_import_result(
     
 
     if task.state == 'PENDING':
-        return ImportResult(status="processing"l, task_id=celery_task_id)
+        return ImportResult(status="processing", task_id=celery_task_id)
     
     elif task.state == 'FAILURE':
         return ImportResult(status="failed", error=str(task.result), task_id=celery_task_id)
