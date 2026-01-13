@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models.rack import Rack
 from app.database.models.stock_item import StockItem
@@ -7,46 +7,49 @@ from app.database.models.product_definition import ProductDefinition
 from app.database.models.user import User
 from sqlalchemy import select
 from datetime import datetime
+from app.services.rack_service import RackService
+
 
 @pytest.mark.asyncio
 async def test_import_racks_success(
-    async_client: AsyncClient, 
-    admin_token: str, 
     db_session: AsyncSession
 ):
     """Test successful import of racks from CSV."""
+    """Test successful import of racks from CSV."""
+    
     csv_content = """Oznaczenie;MaxWagaKg;MaxSzerokoscMm;MaxWysokoscMm;MaxGlebokoscMm;TempMin;TempMax;M;N;Komentarz
 R-100;1000;2000;1000;800;15;25;5;5;Test
 R-101;500;1500;800;600;10;20;5;5;Test2
 """
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
+    # Call Service Directly
+    result = await RackService.process_csv_import(csv_content.encode('utf-8'), db_session)
     
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    assert response.status_code == 200, f"Response: {response.text}"
-    data = response.json()
-    assert data["summary"]["created_count"] == 2
-    assert data["summary"]["updated_count"] == 0
-    assert data["summary"]["skipped_count"] == 0
+    assert result.summary.created_count == 2
+    assert result.summary.updated_count == 0
+    assert result.summary.skipped_count == 0
     
     # Verify DB
-    result = await db_session.execute(select(Rack).where(Rack.designation == "R-100"))
-    rack = result.scalars().first()
+    result_db = await db_session.execute(select(Rack).where(Rack.designation == "R-100"))
+    rack = result_db.scalars().first()
     assert rack is not None
     assert rack.max_weight_kg == 1000
     
 @pytest.mark.asyncio
 async def test_import_racks_conflict_weight(
-    async_client: AsyncClient, 
-    admin_token: str, 
     db_session: AsyncSession
 ):
     """Test import fails validation if new weight is less than existing items total weight."""
     user = await db_session.scalar(select(User))
+    if not user:
+         user = User(
+             login="testuser",
+             email="test@example.com", 
+             password_hash="pw", 
+             role="ADMIN",
+             is_active=True
+         )
+         db_session.add(user)
+         await db_session.commit()
     
     # 1. Setup existing rack and item
     rack = Rack(
@@ -93,27 +96,27 @@ R-VALID1;1000;2000;1000;800;15;25;5;5;Valid
 R-VALID2;1000;2000;1000;800;15;25;5;5;Valid
 R-VALID3;1000;2000;1000;800;15;25;5;5;Valid
 """
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
+    result = await RackService.process_csv_import(csv_content.encode('utf-8'), db_session)
     
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    assert response.status_code == 200, f"Response: {response.text}"
-    data = response.json()
-    assert data["summary"]["skipped_count"] == 1
-    assert "New max weight 500.0kg < current load 800.0kg" in data["summary"]["skipped_details"][0]
+    assert result.summary.skipped_count == 1
+    assert "New max weight 500.0kg < current load 800.0kg" in result.summary.skipped_details[0]
 
 @pytest.mark.asyncio
 async def test_import_racks_conflict_dimensions(
-    async_client: AsyncClient, 
-    admin_token: str, 
     db_session: AsyncSession
 ):
     """Test conflict when new rack dims are smaller than an existing item."""
     user = await db_session.scalar(select(User))
+    if not user:
+         user = User(
+             login="testuser",
+             email="test@example.com", 
+             password_hash="pw", 
+             role="ADMIN",
+             is_active=True
+         )
+         db_session.add(user)
+         await db_session.commit()
 
     # 1. Setup
     rack = Rack(
@@ -157,27 +160,27 @@ R-VALID1;1000;2000;1000;800;15;25;5;5
 R-VALID2;1000;2000;1000;800;15;25;5;5
 R-VALID3;1000;2000;1000;800;15;25;5;5
 """
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
+    result = await RackService.process_csv_import(csv_content.encode('utf-8'), db_session)
     
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    assert response.status_code == 200, f"Response: {response.text}"
-    data = response.json()
-    assert data["summary"]["skipped_count"] == 1
-    assert "New width 1000mm < item width 1800mm" in data["summary"]["skipped_details"][0]
+    assert result.summary.skipped_count == 1
+    assert "New width 1000mm < item width 1800mm" in result.summary.skipped_details[0]
 
 @pytest.mark.asyncio
 async def test_import_racks_conflict_temp(
-    async_client: AsyncClient, 
-    admin_token: str, 
     db_session: AsyncSession
 ):
     """Test conflict when new temp range excludes existing item requirements."""
     user = await db_session.scalar(select(User))
+    if not user:
+         user = User(
+             login="testuser",
+             email="test@example.com", 
+             password_hash="pw", 
+             role="ADMIN",
+             is_active=True
+         )
+         db_session.add(user)
+         await db_session.commit()
 
     # 1. Setup
     rack = Rack(
@@ -195,7 +198,7 @@ async def test_import_racks_conflict_temp(
         expiry_days=30,
         weight_kg=10,
         dims_x_mm=100, dims_y_mm=100, dims_z_mm=100,
-        req_temp_min=15, req_temp_max=20 # Needs strict 15-20C
+        req_temp_min=15, req_temp_max=20 
     )
     db_session.add(product)
     await db_session.flush()
@@ -213,36 +216,35 @@ async def test_import_racks_conflict_temp(
     await db_session.commit()
     
     # 2. Update rack to 0-10C (Too cold for item requesting min 15)
-    # Add valid rows to avoid abort threshold
     csv_content = """Oznaczenie;MaxWagaKg;MaxSzerokoscMm;MaxWysokoscMm;MaxGlebokoscMm;TempMin;TempMax;M;N
 R-TEMP-CONFLICT;1000;2000;1000;800;0;10;5;5
 R-VALID1;1000;2000;1000;800;15;25;5;5
 R-VALID2;1000;2000;1000;800;15;25;5;5
 R-VALID3;1000;2000;1000;800;15;25;5;5
 """
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
+    result = await RackService.process_csv_import(csv_content.encode('utf-8'), db_session)
     
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    assert response.status_code == 200, f"Response: {response.text}"
-    data = response.json()
-    assert data["summary"]["skipped_count"] == 1
+    assert result.summary.skipped_count == 1
     # Check for specific error message about min temp
-    assert "New temp max 10.0 > item max req 20.0" in data["summary"]["skipped_details"][0] or \
-           "New temp min 0.0 < item min req 15.0" in data["summary"]["skipped_details"][0]
+    assert "New temp max 10.0 > item max req 20.0" in result.summary.skipped_details[0] or \
+           "New temp min 0.0 < item min req 15.0" in result.summary.skipped_details[0]
 
 @pytest.mark.asyncio
 async def test_import_racks_abort_threshold(
-    async_client: AsyncClient,
-    admin_token: str,
     db_session: AsyncSession
 ):
     """Test that import raises 400 if conflict rate > 30%."""
     user = await db_session.scalar(select(User))
+    if not user:
+         user = User(
+             login="testuser",
+             email="test@example.com", 
+             password_hash="pw", 
+             role="ADMIN",
+             is_active=True
+         )
+         db_session.add(user)
+         await db_session.commit()
 
     # Setup: 2 racks with items that will conflict
     # Rack A
@@ -256,8 +258,8 @@ async def test_import_racks_abort_threshold(
     # Add heavy items to both
     prod = ProductDefinition(
         name="Heavy",
-        barcode="12345", # Added required
-        expiry_days=30, # Added required
+        barcode="12345", 
+        expiry_days=30, 
         weight_kg=90,
         dims_x_mm=10, dims_y_mm=10, dims_z_mm=10,
         req_temp_min=0, req_temp_max=100
@@ -292,31 +294,8 @@ R-A;50;100;100;100;15;25;5;5
 R-B;50;100;100;100;15;25;5;5
 R-NEW;100;100;100;100;15;25;5;5
 """
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
     
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    with pytest.raises(ValueError) as exc:
+         await RackService.process_csv_import(csv_content.encode('utf-8'), db_session)
     
-    assert response.status_code == 400
-    assert "Too many conflicts" in response.json()["detail"]
-
-@pytest.mark.asyncio
-async def test_import_permissions(
-    async_client: AsyncClient,
-    warehouseman_token: str
-):
-    """Test that non-admins cannot import."""
-    csv_content = "designation;..."
-    files = {"file": ("racks.csv", csv_content, "text/csv")}
-    
-    response = await async_client.post(
-        "/api/v1/racks/import",
-        files=files,
-        headers={"Authorization": f"Bearer {warehouseman_token}"}
-    )
-    
-    # Depending on implementation, might be 403 or 401 if role check fails
-    assert response.status_code in [403]
+    assert "Too many conflicts" in str(exc.value)

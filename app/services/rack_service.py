@@ -76,7 +76,7 @@ class RackService:
         try:
             content = file_content.decode("utf-8")
         except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid file encoding, must be UTF-8")
+            raise ValueError("Invalid file encoding, must be UTF-8")
 
         # Parse CSV
         rows = []
@@ -89,10 +89,11 @@ class RackService:
                 clean_row = {k: v for k, v in row_dict.items() if k}
                 rows.append(RackCSVRow.model_validate(clean_row))
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"CSV Parsing Error: {str(e)}")
+
+            raise ValueError(f"CSV Parsing Error: {str(e)}")
 
         if not rows:
-             raise HTTPException(status_code=400, detail="CSV is empty or contains no valid data")
+             raise ValueError("CSV is empty or contains no valid data")
 
         summary = ImportSummary()
         valid_updates = []
@@ -178,7 +179,7 @@ class RackService:
 
         # Threshold Check
         if len(rows) > 0 and (conflicts_count / len(rows)) > 0.30:
-             raise HTTPException(status_code=400, detail=f"Too many conflicts ({conflicts_count}/{len(rows)}). Aborting import.")
+             raise ValueError(f"Too many conflicts ({conflicts_count}/{len(rows)}). Aborting import.")
 
         # Apply Changes
         for rack, row in valid_updates:

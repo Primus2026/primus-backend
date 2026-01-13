@@ -38,5 +38,8 @@ class ImportSummary(BaseModel):
     skipped_details: List[str] = []
 
 class ImportResult(BaseModel):
-    message: str
-    summary: ImportSummary
+    message: Optional[str] = None
+    summary: Optional[ImportSummary] = None
+    status: Optional[str] = None
+    error: Optional[str] = None
+    task_id: Optional[str] = None
