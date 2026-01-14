@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from app.database.models.user import UserRole
 
 class UserIn(BaseModel):
     login: str 
@@ -10,6 +11,6 @@ class UserOut(BaseModel):
     id: int 
     login: str 
     email: str 
-    role: str 
+    role: UserRole 
     is_2fa_enabled: bool 
     is_active: bool 
