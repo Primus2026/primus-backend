@@ -150,3 +150,87 @@ class ProductDefinitionService:
         await db.delete(product_definition)
         await db.commit()
         return {"message": "Product definition deleted successfully"}
+
+    @staticmethod 
+    async def proces_csv_import(file_content: bytes, db: AsyncSession):
+        from app.schemas.product_definition import ProductDefinitionCSVRow, ImportResult 
+        import csv 
+        import io 
+
+        try:
+            content = file_content.decode("utf-8")
+        except UnicodeDecodeError:
+            return ImportResult(status="error", error="Invalid file encoding, must be UTF-8")
+        
+        rows: list[ProductDefinitionCSVRow] = []
+        try:
+            # Normalize newlines
+            lines = [line.strip() for line in content.splitlines() if line.strip()]
+            
+            clean_lines = []
+            for line in lines:
+                # If line is header (starts with #Nazwa), strip #
+                # If line is comment (starts with # but not header), skip
+                if line.startswith("#Nazwa"):
+                    clean_lines.append(line.lstrip("#"))
+                elif not line.startswith("#"):
+                    clean_lines.append(line)
+            
+            reader = csv.DictReader(clean_lines, delimiter=";")
+            
+            for i, row_dict in enumerate(reader):
+                # Filter out None keys if any (trailing semicolons)
+                clean_row = {k: v for k, v in row_dict.items() if k and k.strip()}
+                try:
+                    # Treat empty strings as None? Pydantic expects correct types.
+                    # bool conversion: "FALSE" -> False
+                    # We rely on Pydantic's coercion, but "FALSE" string might need help if strict
+                    # Check if manual conversion is needed for booleans
+                    if "CzyNiebezpieczny" in clean_row:
+                        val = clean_row["CzyNiebezpieczny"].upper()
+                        if val == "TRUE": clean_row["CzyNiebezpieczny"] = True
+                        elif val == "FALSE": clean_row["CzyNiebezpieczny"] = False
+                        
+                    validated_row = ProductDefinitionCSVRow.model_validate(clean_row)
+                    rows.append(validated_row)
+                except Exception as validation_error:
+                    return ImportResult(
+                        status="error", 
+                        error=f"Validation failed at row {i+2} (data: {clean_row}): {str(validation_error)}"
+                    )
+
+        except Exception as e:
+            return ImportResult(status="error", error=f"Failed to parse CSV structure: {str(e)}")
+        
+        # If we got here, all rows are valid according to Pydantic
+        # Now check for business logic conflicts (e.g. barcode uniqueness)
+        
+        new_definitions = []
+        for row in rows:
+            # Map CSV Row to DB Model
+            product_data = row.dict(by_alias=False)
+            new_def = ProductDefinition(**product_data)
+            new_definitions.append(new_def)
+
+        try:
+            for definition in new_definitions:
+                # Check if exists to avoid generic IntegrityError - optional but safer
+                existing = await db.execute(
+                    select(ProductDefinition).where(ProductDefinition.barcode == definition.barcode)
+                )
+                if existing.scalar_one_or_none():
+                     return ImportResult(
+                        status="error", 
+                        error=f"Duplicate barcode found in DB: {definition.barcode}"
+                    )
+                db.add(definition)
+            
+            await db.commit()
+            return ImportResult(
+                status="success", 
+                message=f"Successfully imported {len(new_definitions)} product definitions."
+            )
+            
+        except Exception as e:
+            await db.rollback()
+            return ImportResult(status="error", error=f"Database error during import: {str(e)}")

@@ -2,11 +2,14 @@
 from app.database.session import get_db
 from fastapi import APIRouter, File, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionOut
+from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionOut, ImportResult
 from app.database.models.product_definition import ProductDefinition
 from app.core import deps
 from app.services.product_definition_service import ProductDefinitionService 
 from app.database.models.user import User
+from app.core.celery_worker import celery_app
+from app.tasks.product_definition_tasks import import_product_definitions as import_task
+from fastapi import Path, HTTPException
 router = APIRouter();
 
 @router.post("/", 
@@ -90,3 +93,51 @@ async def delete_product_definition(
         db=db,
         product_definition_id=product_definition_id
     )
+
+@router.post("/import_csv", response_model=ImportResult)
+async def import_product_definitions_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Import product definitions from a CSV file (Asynchronous).
+    
+    Can only be executed by an admin user.
+    """
+    content = await file.read()
+    task = import_task.delay(content)
+    
+    return ImportResult(
+        message="Import started successfully", 
+        status="processing",
+        task_id=task.id
+    )
+
+@router.get("/import_csv/{task_id}", response_model=ImportResult)
+async def get_import_result(
+    task_id: str = Path(...),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Get the status/result of the import task.
+    """
+    try:
+        task = celery_app.AsyncResult(task_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.state == 'PENDING':
+        return ImportResult(status="processing", task_id=task_id)
+    elif task.state == 'FAILURE':
+        return ImportResult(status="failed", error=str(task.result), task_id=task_id)
+    elif task.state == 'SUCCESS':
+        result_data = task.result
+        # Ensure correct status if not present
+        if isinstance(result_data, dict):
+             if "status" not in result_data:
+                 result_data["status"] = "completed"
+             result_data["task_id"] = task_id
+        return ImportResult(**result_data)
+    
+    return ImportResult(status="processing", task_id=task_id)

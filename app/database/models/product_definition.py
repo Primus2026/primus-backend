@@ -16,4 +16,5 @@ class ProductDefinition(Base):
     dims_y_mm: Mapped[int] = mapped_column(Integer)
     dims_z_mm: Mapped[int] = mapped_column(Integer)
     is_dangerous: Mapped[bool] = mapped_column(Boolean, default=False)
+    comment: Mapped[str] = mapped_column(String(255), nullable=True)
     expiry_days: Mapped[int] = mapped_column(Integer)
