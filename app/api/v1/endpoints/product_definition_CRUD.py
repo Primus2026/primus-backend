@@ -74,3 +74,19 @@ async def get_product_definitions(
         skip=skip,
         limit=limit
     )
+
+@router.delete("/{product_definition_id}")
+async def delete_product_definition(
+    product_definition_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Delete a product definition and its associated image.
+    
+    Can only be executed by an admin user.
+    """
+    return await ProductDefinitionService.delete_product_definition(
+        db=db,
+        product_definition_id=product_definition_id
+    )

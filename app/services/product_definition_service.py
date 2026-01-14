@@ -118,3 +118,35 @@ class ProductDefinitionService:
             select(ProductDefinition).offset(skip).limit(limit)
         )
         return result.scalars().all()
+
+    @staticmethod
+    async def delete_product_definition(
+        db: AsyncSession,
+        product_definition_id: int
+    ):
+        product_definition = await db.get(ProductDefinition, product_definition_id)
+        if not product_definition:
+             raise HTTPException(status_code=404, detail="Product definition not found")
+        
+        # Delete image file if it exists
+        if product_definition.photo_path:
+            # photo_path is stored as "product_images/filename.jpg"
+            # We need to prepend "/app/media/" to get full path
+            # strip leading slash just in case to ensure it's treated as relative
+            clean_rel_path = product_definition.photo_path.lstrip('/')
+            full_path = Path("/app/media") / clean_rel_path
+            
+            print(f"Attempting to delete image at: {full_path}") # LOGGING
+            
+            if full_path.exists():
+                try:
+                    os.remove(full_path)
+                    print(f"Successfully deleted photo: {full_path}")
+                except OSError as e:
+                    print(f"Error deleting file {full_path}: {e}")
+            else:
+                print(f"File not found at: {full_path}")
+
+        await db.delete(product_definition)
+        await db.commit()
+        return {"message": "Product definition deleted successfully"}
