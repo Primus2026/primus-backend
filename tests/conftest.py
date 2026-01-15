@@ -8,9 +8,17 @@ from app.core import security
 from app.main import app
 from app.database.session import get_db
 from app.database.models.base import Base
+from app.core.config import settings
 
 # Use in-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+@pytest.fixture(scope="session", autouse=True)
+def override_media_root(tmp_path_factory):
+    """Overrides MEDIA_ROOT to use a temporary directory for tests"""
+    media_root = tmp_path_factory.mktemp("media")
+    settings.MEDIA_ROOT = str(media_root)
+    return media_root
 
 engine = create_async_engine(
     TEST_DATABASE_URL,

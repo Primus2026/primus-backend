@@ -12,7 +12,8 @@ RUN poetry config virtualenvs.create false \
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 COPY . .
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/media
+RUN chown -R appuser:appuser /app /app/media
 
 USER appuser
 
