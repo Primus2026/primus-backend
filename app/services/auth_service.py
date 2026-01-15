@@ -125,3 +125,22 @@ class AuthService:
             user.id, expires_delta=access_token_expires
         )
         return Token(access_token=new_token, token_type="bearer", is_2fa_required=False)
+
+    # --------------------------- Password change ---------------------------
+
+    @staticmethod
+    async def change_password(
+        db: AsyncSession, user: User, old_password: str, new_password: str
+    ) -> bool:
+        """
+        Change user's password.
+        
+        Returns True if successful, raises HTTPException if old password is invalid.
+        """
+        if not security.verify_password(old_password, user.password_hash):
+            raise HTTPException(status_code=400, detail="Incorrect current password")
+        
+        user.password_hash = security.get_password_hash(new_password)
+        db.add(user)
+        await db.commit()
+        return True

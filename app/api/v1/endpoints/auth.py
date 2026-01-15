@@ -12,6 +12,7 @@ from app.schemas.auth import (
     TwoFactorSetupResponse,
     TwoFactorVerifyRequest,
     TwoFactorLoginRequest,
+    PasswordChangeRequest,
 )
 from app.schemas.msg import Msg
 from app.services.auth_service import AuthService
@@ -113,3 +114,34 @@ async def login_2fa(
     Returns a full access token if successful.
     """
     return await AuthService.login_2fa(db, body.token, body.code)
+
+
+@router.post(
+    "/change-password",
+    response_model=Msg,
+    summary="Change user password",
+    responses={
+        400: {"description": "Incorrect current password"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def change_password(
+    body: PasswordChangeRequest,
+    current_user: User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """
+    Change the current user's password.
+
+    Requires:
+    - **old_password**: The user's current password for verification.
+    - **new_password**: The new password (minimum 8 characters).
+    - **confirm_password**: Confirmation of the new password (must match).
+
+    Returns a success message if the password is changed successfully.
+    """
+    await AuthService.change_password(
+        db, current_user, body.old_password, body.new_password
+    )
+    return {"message": "Password changed successfully"}
+

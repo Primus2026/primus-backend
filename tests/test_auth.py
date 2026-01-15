@@ -167,3 +167,118 @@ async def test_2fa_login_flow(async_client: AsyncClient, db_session: AsyncSessio
         headers={"Authorization": f"Bearer {final_token}"}
     )
     assert resp_me.status_code == 200
+
+# --- PASSWORD CHANGE TESTS ---
+
+@pytest.mark.asyncio
+async def test_change_password_success(async_client: AsyncClient, auth_user: User):
+    # Login
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "secret_password"}
+    )
+    token = login_resp.json()["access_token"]
+
+    # Change password
+    response = await async_client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "old_password": "secret_password",
+            "new_password": "new_secure_password123",
+            "confirm_password": "new_secure_password123"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password changed successfully"
+
+    # Verify old password no longer works
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "secret_password"}
+    )
+    assert login_resp.status_code == 400
+
+    # Verify new password works
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "new_secure_password123"}
+    )
+    assert login_resp.status_code == 200
+
+@pytest.mark.asyncio
+async def test_change_password_incorrect_old_password(async_client: AsyncClient, auth_user: User):
+    # Login
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "secret_password"}
+    )
+    token = login_resp.json()["access_token"]
+
+    # Try to change password with incorrect old password
+    response = await async_client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "old_password": "wrong_password",
+            "new_password": "new_secure_password123",
+            "confirm_password": "new_secure_password123"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Incorrect current password"
+
+@pytest.mark.asyncio
+async def test_change_password_mismatch(async_client: AsyncClient, auth_user: User):
+    # Login
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "secret_password"}
+    )
+    token = login_resp.json()["access_token"]
+
+    # Try to change password with mismatched confirmation
+    response = await async_client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "old_password": "secret_password",
+            "new_password": "new_secure_password123",
+            "confirm_password": "different_password"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_change_password_too_short(async_client: AsyncClient, auth_user: User):
+    # Login
+    login_resp = await async_client.post(
+        "/api/v1/auth/login",
+        data={"username": auth_user.login, "password": "secret_password"}
+    )
+    token = login_resp.json()["access_token"]
+
+    # Try to change password with a short password
+    response = await async_client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "old_password": "secret_password",
+            "new_password": "short",
+            "confirm_password": "short"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_change_password_without_auth(async_client: AsyncClient):
+    # Try to change password without authentication
+    response = await async_client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "old_password": "secret_password",
+            "new_password": "new_secure_password123",
+            "confirm_password": "new_secure_password123"
+        }
+    )
+    assert response.status_code == 401
