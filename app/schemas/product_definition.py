@@ -18,7 +18,7 @@ class ProductDefinitionOut(BaseModel):
     id: int
     name: str
     barcode: str
-    photo_path: str
+    photo_path: Optional[str] = None
     req_temp_min: float
     req_temp_max: float
     weight_kg: float
@@ -74,6 +74,7 @@ class ImportSummary(BaseModel):
     success_count: int = 0
     error_count: int = 0
     errors: List[str] = []
+    successes: List[dict] = []
 
 
 class ImportResult(BaseModel):

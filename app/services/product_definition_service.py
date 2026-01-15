@@ -7,6 +7,7 @@ from sqlalchemy import select
 import os
 import aiofiles
 import uuid
+from app.core.config import settings
 
 class ProductDefinitionService:
     @staticmethod 
@@ -64,7 +65,7 @@ class ProductDefinitionService:
         
         # 1. Define base upload directory
         # Using the standard path defined in Dockerfile/docker-compose
-        upload_dir = Path("/app/media/product_images")
+        upload_dir = Path(settings.MEDIA_ROOT) / "product_images"
         
         # 2. Bezpieczne tworzenie folderu
         os.makedirs(upload_dir, exist_ok=True)
@@ -96,6 +97,43 @@ class ProductDefinitionService:
         await db.commit()
         await db.refresh(product_definition)
         
+        return product_definition
+
+    @staticmethod
+    async def upload_image_from_path(
+        db: AsyncSession,
+        product_definition: ProductDefinition,
+        local_file_path: Path
+    ) -> ProductDefinition:
+        """
+        Moves a file from a local temporary path to the final destination 
+        and updates the product definition.
+        """
+        upload_dir = Path(settings.MEDIA_ROOT) / "product_images"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        file_extension = os.path.splitext(local_file_path.name)[1]
+        if not file_extension:
+            file_extension = ".jpg" 
+        
+        new_filename = f"{uuid.uuid4()}{file_extension}"
+        final_path = upload_dir / new_filename
+        
+        try:
+            # We use shutil.move for atomic-ish move if on same filesystem, or copy+del
+            import shutil
+            shutil.move(str(local_file_path), str(final_path))
+        except Exception as e:
+            raise Exception(f"Failed to move file {local_file_path} to {final_path}: {e}")
+            
+        relative_path = os.path.join("product_images", new_filename)
+        product_definition.photo_path = relative_path
+        db.add(product_definition)
+        # Commit should be handled by caller usually for bulk invoke, 
+        # but here we might want to commit per item to save progress. 
+        # The prompt asked for "Collect results", so per-item commit is safer against one failure blocking all.
+        await db.commit()
+        await db.refresh(product_definition)
         return product_definition
 
     @staticmethod
@@ -134,7 +172,7 @@ class ProductDefinitionService:
             # We need to prepend "/app/media/" to get full path
             # strip leading slash just in case to ensure it's treated as relative
             clean_rel_path = product_definition.photo_path.lstrip('/')
-            full_path = Path("/app/media") / clean_rel_path
+            full_path = Path(settings.MEDIA_ROOT) / clean_rel_path
             
             print(f"Attempting to delete image at: {full_path}") # LOGGING
             

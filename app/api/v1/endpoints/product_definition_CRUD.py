@@ -8,9 +8,14 @@ from app.core import deps
 from app.services.product_definition_service import ProductDefinitionService 
 from app.database.models.user import User
 from app.core.celery_worker import celery_app
-from app.tasks.product_definition_tasks import import_product_definitions as import_task
+from app.tasks.product_definition_tasks import import_product_definitions as import_task, bulk_upload_images as bulk_upload_task
 from fastapi import Path, HTTPException
-router = APIRouter();
+import shutil
+import os
+import uuid
+from typing import List
+
+router = APIRouter()
 
 @router.post("/", 
 # response_model=ProductDefinitionOut
@@ -47,6 +52,77 @@ async def upload_image(
         product_definition_id=product_definition_id,
         file=file,
     )
+
+@router.post("/bulk-images", response_model=ImportResult)
+async def bulk_upload_images(
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Bulk upload images for product definitions. 
+    Matches files to products by filename (stored in photo_path).
+    Processing is done in background.
+    """
+    import uuid
+    from app.core.config import settings
+    # Create a temp dir for this batch in shared volume
+    batch_id = str(uuid.uuid4())
+    # Use MEDIA_ROOT so both containers can access it (mounted volume)
+    temp_dir = os.path.join(settings.MEDIA_ROOT, "temp_uploads", batch_id)
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    try:
+        for file in files:
+            file_path = os.path.join(temp_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        shutil.rmtree(temp_dir)
+        raise HTTPException(status_code=500, detail=f"Failed to save temporary files: {str(e)}")
+        
+    # Trigger Celery task
+    task = bulk_upload_task.delay(temp_dir)
+    
+    return ImportResult(
+        message="Bulk image upload started",
+        status="processing",
+        task_id=task.id
+    )
+
+@router.get("/bulk-images/{task_id}", response_model=ImportResult)
+async def get_bulk_upload_status(
+    task_id: str = Path(...),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Get the status of the bulk upload task.
+    """
+    try:
+        task = celery_app.AsyncResult(task_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.state == 'PENDING':
+        return ImportResult(status="processing", task_id=task_id)
+    elif task.state == 'FAILURE':
+        return ImportResult(status="failed", error=str(task.result), task_id=task_id)
+    elif task.state == 'SUCCESS':
+        result_data = task.result
+        # Task returns dict matching ImportSummary fields?
+        # result_data = { "total_processed": 10, "success_count": 5, "error_count": 5, "errors": [...] }
+        
+        summary = None
+        if isinstance(result_data, dict):
+             summary = result_data
+        
+        return ImportResult(
+            status="completed", 
+            task_id=task_id,
+            summary=summary
+        )
+    
+    return ImportResult(status="processing", task_id=task_id)
 
 @router.get("/{product_definition_id}", response_model=ProductDefinitionOut)
 async def get_product_definition(

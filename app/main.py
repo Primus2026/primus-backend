@@ -27,8 +27,15 @@ import os
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Mount media directory
-media_path = "/app/media"
-os.makedirs(media_path, exist_ok=True)
+# Mount media directory
+try:
+    media_path = "/app/media"
+    os.makedirs(media_path, exist_ok=True)
+except PermissionError:
+    # Fallback for local development
+    media_path = "media"
+    os.makedirs(media_path, exist_ok=True)
+
 app.mount("/media", StaticFiles(directory=media_path), name="media")
 
 @app.get("/")
