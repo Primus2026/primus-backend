@@ -18,6 +18,9 @@ def override_media_root(tmp_path_factory):
     """Overrides MEDIA_ROOT to use a temporary directory for tests"""
     media_root = tmp_path_factory.mktemp("media")
     settings.MEDIA_ROOT = str(media_root)
+    # Also override REPORT_DIR
+    report_dir = tmp_path_factory.mktemp("reports")
+    settings.REPORT_DIR = str(report_dir)
     return media_root
 
 engine = create_async_engine(
