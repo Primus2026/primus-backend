@@ -191,14 +191,14 @@ class ProductDefinitionService:
 
     @staticmethod 
     async def proces_csv_import(file_content: bytes, db: AsyncSession):
-        from app.schemas.product_definition import ProductDefinitionCSVRow, ImportResult 
+        from app.schemas.product_definition import ProductDefinitionCSVRow, ProductImportResult 
         import csv 
         import io 
 
         try:
             content = file_content.decode("utf-8")
         except UnicodeDecodeError:
-            return ImportResult(status="error", error="Invalid file encoding, must be UTF-8")
+            return ProductImportResult(status="error", error="Invalid file encoding, must be UTF-8")
         
         rows: list[ProductDefinitionCSVRow] = []
         try:
@@ -232,13 +232,13 @@ class ProductDefinitionService:
                     validated_row = ProductDefinitionCSVRow.model_validate(clean_row)
                     rows.append(validated_row)
                 except Exception as validation_error:
-                    return ImportResult(
+                    return ProductImportResult(
                         status="error", 
                         error=f"Validation failed at row {i+2} (data: {clean_row}): {str(validation_error)}"
                     )
 
         except Exception as e:
-            return ImportResult(status="error", error=f"Failed to parse CSV structure: {str(e)}")
+            return ProductImportResult(status="error", error=f"Failed to parse CSV structure: {str(e)}")
         
         # If we got here, all rows are valid according to Pydantic
         # Now check for business logic conflicts (e.g. barcode uniqueness)
@@ -257,18 +257,18 @@ class ProductDefinitionService:
                     select(ProductDefinition).where(ProductDefinition.barcode == definition.barcode)
                 )
                 if existing.scalar_one_or_none():
-                     return ImportResult(
+                     return ProductImportResult(
                         status="error", 
                         error=f"Duplicate barcode found in DB: {definition.barcode}"
                     )
                 db.add(definition)
             
             await db.commit()
-            return ImportResult(
+            return ProductImportResult(
                 status="success", 
                 message=f"Successfully imported {len(new_definitions)} product definitions."
             )
             
         except Exception as e:
             await db.rollback()
-            return ImportResult(status="error", error=f"Database error during import: {str(e)}")
+            return ProductImportResult(status="error", error=f"Database error during import: {str(e)}")

@@ -1,10 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from app.database.models.user import UserRole
 
 class UserIn(BaseModel):
-    login: str 
-    email: str 
-    password: str 
+    login: str = Field(..., description="Unique username")
+    email: str = Field(..., description="Unique email address")
+    password: str = Field(..., description="Strong password")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "login": "newuser",
+                "email": "newuser@example.com",
+                "password": "strongpassword123"
+            }
+        }
+    ) 
     
 
 class UserOut(BaseModel):

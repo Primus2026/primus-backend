@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, ValidationInfo
+from pydantic import BaseModel, field_validator, ValidationInfo, ConfigDict, Field
 
 
 class TwoFactorSetupResponse(BaseModel):
@@ -17,9 +17,9 @@ class TwoFactorLoginRequest(BaseModel):
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type: str
-    is_2fa_required: bool = False
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(..., description="Token type, e.g., 'bearer'")
+    is_2fa_required: bool = Field(False, description="Whether 2FA verification is pending")
 
 
 class TokenPayload(BaseModel):
@@ -27,9 +27,19 @@ class TokenPayload(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    old_password: str
-    new_password: str
-    confirm_password: str
+    old_password: str = Field(..., description="Current active password")
+    new_password: str = Field(..., description="New password (min 8 chars)")
+    confirm_password: str = Field(..., description="Repeat new password for confirmation")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "old_password": "oldSecretPassword123",
+                "new_password": "newSecretPassword456",
+                "confirm_password": "newSecretPassword456"
+            }
+        }
+    )
 
     @field_validator("new_password")
     @classmethod

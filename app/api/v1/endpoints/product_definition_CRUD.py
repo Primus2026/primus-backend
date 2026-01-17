@@ -2,7 +2,7 @@
 from app.database.session import get_db
 from fastapi import APIRouter, File, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionOut, ImportResult
+from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionOut, ProductImportResult
 from app.database.models.product_definition import ProductDefinition
 from app.core import deps
 from app.services.product_definition_service import ProductDefinitionService 
@@ -53,7 +53,7 @@ async def upload_image(
         file=file,
     )
 
-@router.post("/bulk-images", response_model=ImportResult)
+@router.post("/bulk-images", response_model=ProductImportResult)
 async def bulk_upload_images(
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
@@ -84,13 +84,13 @@ async def bulk_upload_images(
     # Trigger Celery task
     task = bulk_upload_task.delay(temp_dir)
     
-    return ImportResult(
+    return ProductImportResult(
         message="Bulk image upload started",
         status="processing",
         task_id=task.id
     )
 
-@router.get("/bulk-images/{task_id}", response_model=ImportResult)
+@router.get("/bulk-images/{task_id}", response_model=ProductImportResult)
 async def get_bulk_upload_status(
     task_id: str = Path(...),
     admin: User = Depends(deps.get_current_admin),
@@ -104,25 +104,25 @@ async def get_bulk_upload_status(
         raise HTTPException(status_code=404, detail="Task not found")
 
     if task.state == 'PENDING':
-        return ImportResult(status="processing", task_id=task_id)
+        return ProductImportResult(status="processing", task_id=task_id)
     elif task.state == 'FAILURE':
-        return ImportResult(status="failed", error=str(task.result), task_id=task_id)
+        return ProductImportResult(status="failed", error=str(task.result), task_id=task_id)
     elif task.state == 'SUCCESS':
         result_data = task.result
-        # Task returns dict matching ImportSummary fields?
+        # Task returns dict matching ProductImportSummary fields?
         # result_data = { "total_processed": 10, "success_count": 5, "error_count": 5, "errors": [...] }
         
         summary = None
         if isinstance(result_data, dict):
              summary = result_data
         
-        return ImportResult(
+        return ProductImportResult(
             status="completed", 
             task_id=task_id,
             summary=summary
         )
     
-    return ImportResult(status="processing", task_id=task_id)
+    return ProductImportResult(status="processing", task_id=task_id)
 
 @router.get("/{product_definition_id}", response_model=ProductDefinitionOut)
 async def get_product_definition(
@@ -170,7 +170,7 @@ async def delete_product_definition(
         product_definition_id=product_definition_id
     )
 
-@router.post("/import_csv", response_model=ImportResult)
+@router.post("/import_csv", response_model=ProductImportResult)
 async def import_product_definitions_csv(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -184,13 +184,13 @@ async def import_product_definitions_csv(
     content = await file.read()
     task = import_task.delay(content)
     
-    return ImportResult(
+    return ProductImportResult(
         message="Import started successfully", 
         status="processing",
         task_id=task.id
     )
 
-@router.get("/import_csv/{task_id}", response_model=ImportResult)
+@router.get("/import_csv/{task_id}", response_model=ProductImportResult)
 async def get_import_result(
     task_id: str = Path(...),
     admin: User = Depends(deps.get_current_admin),
@@ -204,9 +204,9 @@ async def get_import_result(
         raise HTTPException(status_code=404, detail="Task not found")
 
     if task.state == 'PENDING':
-        return ImportResult(status="processing", task_id=task_id)
+        return ProductImportResult(status="processing", task_id=task_id)
     elif task.state == 'FAILURE':
-        return ImportResult(status="failed", error=str(task.result), task_id=task_id)
+        return ProductImportResult(status="failed", error=str(task.result), task_id=task_id)
     elif task.state == 'SUCCESS':
         result_data = task.result
         # Ensure correct status if not present
@@ -214,6 +214,6 @@ async def get_import_result(
              if "status" not in result_data:
                  result_data["status"] = "completed"
              result_data["task_id"] = task_id
-        return ImportResult(**result_data)
+        return ProductImportResult(**result_data)
     
-    return ImportResult(status="processing", task_id=task_id)
+    return ProductImportResult(status="processing", task_id=task_id)
