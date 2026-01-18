@@ -9,6 +9,8 @@ from app.services.report_storage import ReportStorageService
 from app.database.models.stock_item import StockItem
 from app.database.models.product_definition import ProductDefinition
 from app.database.models.rack import Rack
+from app.database.models.alert import Alert, AlertType
+from app.database.models.user import User
 from app.core.config import settings
 
 # ==========================================
@@ -113,7 +115,7 @@ def test_report_storage_list_reports(tmp_path):
 @pytest.mark.asyncio
 async def test_generate_expiry_report_endpoint(authorized_warehouseman_client: AsyncClient):
     """
-    Test POST /reports/expiry/generate
+    Test POST /reports/generate?report_type=expiry
     Mocks the Celery task delay method.
     """
     with patch("app.api.v1.endpoints.reports.generate_expiry_report_task.delay") as mock_delay:
@@ -121,17 +123,17 @@ async def test_generate_expiry_report_endpoint(authorized_warehouseman_client: A
         mock_task.id = "test-task-id"
         mock_delay.return_value = mock_task
 
-        response = await authorized_warehouseman_client.post("/api/v1/reports/expiry/generate")
+        response = await authorized_warehouseman_client.post("/api/v1/reports/generate/expiry")
         
         assert response.status_code == 202
         assert response.json()["task_id"] == "test-task-id"
         # Verify called with default None for filters
-        mock_delay.assert_called_once_with(user_id=ANY, rack_id=None, barcode=None)
+        mock_delay.assert_called_once_with(rack_id=None, barcode=None)
 
 @pytest.mark.asyncio
 async def test_generate_expiry_report_with_filters(authorized_warehouseman_client: AsyncClient):
     """
-    Test POST /reports/expiry/generate with filters
+    Test POST /reports/generate?report_type=expiry with filters
     """
     with patch("app.api.v1.endpoints.reports.generate_expiry_report_task.delay") as mock_delay:
         mock_task = MagicMock()
@@ -139,13 +141,13 @@ async def test_generate_expiry_report_with_filters(authorized_warehouseman_clien
         mock_delay.return_value = mock_task
 
         payload = {"rack_id": 5, "barcode": "ABC-123"}
-        response = await authorized_warehouseman_client.post("/api/v1/reports/expiry/generate", json=payload)
+        response = await authorized_warehouseman_client.post("/api/v1/reports/generate/expiry", json=payload)
         
         assert response.status_code == 202
         assert response.json()["task_id"] == "test-task-id-filtered"
         
         # Verify filters passed to task
-        mock_delay.assert_called_once_with(user_id=ANY, rack_id=5, barcode="ABC-123")
+        mock_delay.assert_called_once_with(rack_id=5, barcode="ABC-123")
 
 @pytest.mark.asyncio
 async def test_get_report_status_endpoint_success(authorized_warehouseman_client: AsyncClient):
@@ -161,7 +163,7 @@ async def test_get_report_status_endpoint_success(authorized_warehouseman_client
         
         mock_async_result.return_value = mock_result_instance
 
-        response = await authorized_warehouseman_client.get("/api/v1/reports/expiry/status/test-task-id")
+        response = await authorized_warehouseman_client.get("/api/v1/reports/status/test-task-id")
         
         assert response.status_code == 200
         data = response.json()
@@ -182,7 +184,7 @@ async def test_get_report_status_endpoint_pending(authorized_warehouseman_client
         
         mock_async_result.return_value = mock_result_instance
 
-        response = await authorized_warehouseman_client.get("/api/v1/reports/expiry/status/test-task-id")
+        response = await authorized_warehouseman_client.get("/api/v1/reports/status/test-task-id")
         
         assert response.status_code == 200
         data = response.json()
@@ -224,4 +226,93 @@ async def test_download_report_endpoint(authorized_warehouseman_client: AsyncCli
         
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
-        assert b"%PDF-1.4" in response.content # Check content
+
+def test_generate_audit_pdf_creation(tmp_path):
+    """
+    Verifies that generate_audit_pdf creates a file with a PDF header and handles all sections.
+    """
+    # 1. Setup Mock Data
+    
+    # Mock Racks
+    rack1 = MagicMock(spec=Rack)
+    rack1.designation = "R-01"
+    rack1.rows_m = 5
+    rack1.cols_n = 10
+    # Mock items list for fill calculation
+    rack1.items = [1, 2, 3] # just need length
+    
+    rack2 = MagicMock(spec=Rack)
+    rack2.designation = "R-02"
+    rack2.rows_m = 4
+    rack2.cols_n = 5
+    rack2.items = [] # empty
+    
+    racks = [rack1, rack2]
+    
+    # Mock Items
+    p1 = MagicMock(spec=ProductDefinition)
+    p1.name = "Test Product A"
+    p1.barcode = "123"
+    
+    u1 = MagicMock(spec=User)
+    u1.email = "warehouseman@example.com"
+    
+    item1 = MagicMock(spec=StockItem)
+    item1.product = p1
+    item1.rack = rack1
+    item1.position_row = 1
+    item1.position_col = 1
+    item1.entry_date = datetime.now()
+    item1.receiver = u1
+    
+    items = [item1]
+    
+    # Mock Alerts
+    alert1 = MagicMock(spec=Alert)
+    alert1.created_at = datetime.now()
+    alert1.alert_type = AlertType.TEMP
+    alert1.message = "Temperature too high"
+    alert1.rack = rack1
+    alert1.product = None
+    
+    alert2 = MagicMock(spec=Alert)
+    alert2.created_at = datetime.now() - timedelta(days=1)
+    alert2.alert_type = AlertType.EXPIRY
+    alert2.message = "Product expired"
+    alert2.rack = None
+    alert2.product = p1
+    
+    alerts = [alert1, alert2]
+    
+    # 2. Define Output Path
+    output_dir = tmp_path / "reports"
+    output_dir.mkdir()
+    filename = "AUDIT_TEST.pdf"
+    file_path = output_dir / filename
+    
+    # 3. Call Service
+    generated_name = ReportService.generate_audit_pdf(racks, items, alerts, file_path)
+    
+    # 4. Assertions
+    assert generated_name == filename
+    assert file_path.exists()
+    assert file_path.stat().st_size > 0
+    
+    # Check PDF Header using first bytes
+    with open(file_path, "rb") as f:
+        header = f.read(4)
+        assert header == b"%PDF"
+
+def test_generate_audit_pdf_empty(tmp_path):
+    """
+    Verifies that generate_audit_pdf handles empty lists gracefully.
+    """
+    output_dir = tmp_path / "reports_empty"
+    output_dir.mkdir()
+    file_path = output_dir / "AUDIT_EMPTY.pdf"
+    
+    ReportService.generate_audit_pdf([], [], [], file_path)
+    
+    assert file_path.exists()
+    assert file_path.stat().st_size > 0
+

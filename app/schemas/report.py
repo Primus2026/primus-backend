@@ -1,6 +1,13 @@
 from datetime import datetime
 from typing import Optional, List
+from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
+
+class ReportType(Enum):
+    EXPIRY = "expiry"
+    AUDIT = "audit"
+    TEMP = "temp"
+    
 
 class ReportResponse(BaseModel):
     """Response model for a single report file."""

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     MEDIA_ROOT: str = "/data/media"
     REPORT_DIR: str = "/data/reports"
 
+    REPORTS_SCHEDULE_HOUR: int = 7
+    REPORTS_SCHEDULE_MINUTE: int = 30
+
     model_config = SettingsConfigDict(
         case_sensitive=True,
         env_file=".env",
