@@ -77,7 +77,7 @@ class RackService:
 
     @staticmethod
     async def process_csv_import(file_content: bytes, db: AsyncSession):
-        from app.schemas.csv_import import RackCSVRow, ImportSummary, ImportResult
+        from app.schemas.rack import RackCSVRow, RackImportSummary, RackImportResult
         import csv
         import io
         from sqlalchemy.orm import selectinload
@@ -105,7 +105,7 @@ class RackService:
         if not rows:
              raise ValueError("CSV is empty or contains no valid data")
 
-        summary = ImportSummary()
+        summary = RackImportSummary()
         valid_updates = []
         new_racks = []
         
@@ -222,4 +222,4 @@ class RackService:
 
         await db.commit()
         
-        return ImportResult(message="Import completed successfully", summary=summary)
+        return RackImportResult(message="Import completed successfully", summary=summary)

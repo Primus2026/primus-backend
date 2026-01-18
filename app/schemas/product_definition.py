@@ -1,18 +1,36 @@
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, validator, Field, ConfigDict
 from typing import List, Optional 
 
 class ProductDefinitionIn(BaseModel):
-    name: str
-    barcode: str
-    req_temp_min: float
-    req_temp_max: float
-    weight_kg: float
-    dims_x_mm: int
-    dims_y_mm: int
-    dims_z_mm: int
-    is_dangerous: bool
-    comment: str
-    expiry_days: int
+    name: str = Field(..., description="Name of the product/assortment")
+    barcode: str = Field(..., description="Unique barcode or QR code identifier")
+    req_temp_min: float = Field(..., description="Minimum required storage temperature (°C)")
+    req_temp_max: float = Field(..., description="Maximum required storage temperature (°C)")
+    weight_kg: float = Field(..., description="Weight per unit (kg)")
+    dims_x_mm: int = Field(..., description="Width (mm)")
+    dims_y_mm: int = Field(..., description="Height (mm)")
+    dims_z_mm: int = Field(..., description="Depth (mm)")
+    is_dangerous: bool = Field(..., description="Whether the item is hazardous/dangerous")
+    comment: str = Field(..., description="Additional notes or handling instructions")
+    expiry_days: int = Field(..., description="Shelf life in days from reception")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Standard Widget",
+                "barcode": "1234567890123",
+                "req_temp_min": 5.0,
+                "req_temp_max": 25.0,
+                "weight_kg": 1.5,
+                "dims_x_mm": 100,
+                "dims_y_mm": 50,
+                "dims_z_mm": 50,
+                "is_dangerous": False,
+                "comment": "Fragile item",
+                "expiry_days": 365
+            }
+        }
+    )
 
 class ProductDefinitionOut(BaseModel):
     id: int
@@ -69,17 +87,17 @@ class ProductDefinitionCSVRow(BaseModel):
         return v
 
 
-class ImportSummary(BaseModel):
-    total_processed: int = 0
-    success_count: int = 0
-    error_count: int = 0
-    errors: List[str] = []
-    successes: List[dict] = []
+class ProductImportSummary(BaseModel):
+    total_processed: int = Field(0, description="Total rows processed")
+    success_count: int = Field(0, description="Rows successfully imported")
+    error_count: int = Field(0, description="Rows failed")
+    errors: List[str] = Field([], description="List of error messages")
+    successes: List[dict] = Field([], description="Details of successful imports")
 
 
-class ImportResult(BaseModel):
-    message: Optional[str] = None
-    summary: Optional[ImportSummary] = None
-    status: Optional[str] = None
-    error: Optional[str] = None
-    task_id: Optional[str] = None
+class ProductImportResult(BaseModel):
+    message: Optional[str] = Field(None, description="Result message")
+    summary: Optional[ProductImportSummary] = Field(None, description="Import statistics")
+    status: Optional[str] = Field(None, description="Task status (e.g. SUCCESS, FAILURE)")
+    error: Optional[str] = Field(None, description="Generic error message")
+    task_id: Optional[str] = Field(None, description="Celery task ID")

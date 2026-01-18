@@ -3,8 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.database.models.user import User
 from app.core import deps
-from app.schemas.rack import RackCreate, RackUpdate, RackOut
-from app.schemas.csv_import import ImportResult
+from app.schemas.rack import RackCreate, RackUpdate, RackOut, RackImportResult
 from app.services.rack_service import RackService
 from app.core.celery_worker import celery_app
 from app.tasks.csv_import import import_racks as import_racks_task
@@ -24,7 +23,7 @@ async def create_rack(
     """
     return await RackService.create_rack(db, rack)
 
-@router.post("/import", response_model=ImportResult, responses={
+@router.post("/import", response_model=RackImportResult, responses={
     403: {"description": "Not enough permissions (Admin required)"}
 })
 async def import_racks(
@@ -46,14 +45,14 @@ async def import_racks(
     content = await file.read()
     task = import_racks_task.delay(content)
     
-    return ImportResult(
+    return RackImportResult(
         message="Import started successfully", 
         status="processing",
         task_id=task.id
     )
 
 
-@router.get("/import/{celery_task_id}", response_model=ImportResult, responses={
+@router.get("/import/{celery_task_id}", response_model=RackImportResult, responses={
     403: {"description": "Not enough permissions (Admin required)"},
     404: {"description": "Import task not found"},
 })
@@ -76,10 +75,10 @@ async def get_import_result(
     
 
     if task.state == 'PENDING':
-        return ImportResult(status="processing", task_id=celery_task_id)
+        return RackImportResult(status="processing", task_id=celery_task_id)
     
     elif task.state == 'FAILURE':
-        return ImportResult(status="failed", error=str(task.result), task_id=celery_task_id)
+        return RackImportResult(status="failed", error=str(task.result), task_id=celery_task_id)
         
 
     #Task already returns a pydantic model, you have to overwrite dict fields
@@ -87,8 +86,8 @@ async def get_import_result(
         result_data = task.result
         if isinstance(result_data, dict):
             result_data["status"] = "completed"
-            result_data["task_id"] = "celery_task_id"
-        return ImportResult(**result_data)
+            result_data["task_id"] = celery_task_id
+        return RackImportResult(**result_data)
     
 
 

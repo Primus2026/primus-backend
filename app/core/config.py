@@ -22,7 +22,10 @@ class Settings(BaseSettings):
 
     CELERY_BROKER_URL: str = REDIS_URL
     CELERY_RESULT_BACKEND: str = REDIS_URL
-    MEDIA_ROOT: str = "/app/media"
+    CELERY_TIMEZONE: str = "Europe/Warsaw"
+
+    MEDIA_ROOT: str = "/data/media"
+    REPORT_DIR: str = "/data/reports"
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

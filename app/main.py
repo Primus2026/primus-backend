@@ -27,12 +27,11 @@ import os
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Mount media directory
-# Mount media directory
 try:
-    media_path = "/app/media"
+    media_path = settings.MEDIA_ROOT
     os.makedirs(media_path, exist_ok=True)
 except PermissionError:
-    # Fallback for local development
+    # Fallback for local development if /data is not accessible
     media_path = "media"
     os.makedirs(media_path, exist_ok=True)
 
