@@ -2,12 +2,36 @@ from fastapi import FastAPI
 from .core.config import settings
 from .api.v1.api import api_router
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: [%(asctime)s][%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+from contextlib import asynccontextmanager
+from app.core.redis_client import RedisClient
+from app.database.session import SessionLocal
+from app.services.weight_service import WeightService
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    redis_client = RedisClient.get_client()
+    async with SessionLocal() as db:
+        await WeightService.calculate_and_cache_weights(db)
+    yield
+    # Shutdown
+    await RedisClient.close()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
-    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
+    lifespan=lifespan
 )
 
 
