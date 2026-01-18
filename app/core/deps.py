@@ -8,8 +8,13 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.database.models.user import User, UserRole
 from app.schemas.auth import TokenPayload
+from app.core.redis_client import RedisClient
+import redis.asyncio as redis
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+
+async def get_redis() -> redis.Redis:
+    return RedisClient.get_client()
 
 
 async def get_current_user(
