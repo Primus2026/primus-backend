@@ -16,7 +16,7 @@ primus-backend/
 │   ├── database/         # Data Persistence (SQLAlchemy models, Session)
 │   │   ├── session.py    # Engine and SessionLocal
 │   │   └── models.py     # Database Tables
-│   ├── models/           # Data Validation (Pydantic Schemas)
+│   ├── schemas/           # Data Validation (Pydantic Schemas)
 │   └── services/         # Business Logic (Repositories)
 ├── tests/                # Tests
 ├── pyproject.toml        # Poetry dependencies
