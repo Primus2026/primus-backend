@@ -1,6 +1,6 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 
 from app.core.deps import get_current_user
@@ -8,44 +8,62 @@ from app.database.models.user import User
 from app.schemas.report import ReportResponse, ReportGenerateResponse, ReportStatusResponse, ReportFilter
 from app.services.report_storage import ReportStorageService
 from app.tasks.report_tasks import generate_expiry_report_task
+from app.schemas.report import ReportType
 
 router = APIRouter()
 
 @router.post(
-    "/expiry/generate",
+    "/generate/{report_type}",
     response_model=ReportGenerateResponse,
     status_code=202,
     summary="Trigger Report Generation",
     responses={
         202: {"description": "Report generation initiated successfully"},
         401: {"description": "Not authenticated"},
+        400: {"description": "Invalid report type"},
+        501: {"description": "Temperature report not implemented yet"}
     },
 )
-def generate_expiry_report(
+def generate_report(
+    report_type: ReportType,
     filters: Optional[ReportFilter] = None,
     current_user: User = Depends(get_current_user)
 ):
     """
-    Trigger generation of the expiry date report.
+    Trigger generation of a report.
     Returns a task_id to poll for status.
-    Optional filters:
+
+    **report_type**:
+    - **expiry**: Expiry date report.
+    - **audit**: Full warehouse audit report.
+    - **temp**: Temperature report (TO-DO).
+
+    Optional filters (only for expiry and temp report):
     - **rack_id**: Filter by specific rack.
     - **barcode**: Filter by product barcode.
     """
-    # Authorization check could be added here if restricted to Admin/Worker
     
-    # Prepare arguments
     rack_id = filters.rack_id if filters else None
     barcode = filters.barcode if filters else None
 
-    task = generate_expiry_report_task.delay(user_id=current_user.id, rack_id=rack_id, barcode=barcode)
+    if report_type == ReportType.EXPIRY:
+        task = generate_expiry_report_task.delay(rack_id=rack_id, barcode=barcode)
+    elif report_type == ReportType.AUDIT:
+        from app.tasks.report_tasks import generate_audit_report_task
+        task = generate_audit_report_task.delay()
+    elif report_type == ReportType.TEMP:
+        raise HTTPException(status_code=501, detail="Temperature report not implemented yet.")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid report type.")
+    
     return ReportGenerateResponse(
         task_id=task.id,
         message="Report generation initiated."
     )
 
+
 @router.get(
-    "/expiry/status/{task_id}",
+    "/status/{task_id}",
     response_model=ReportStatusResponse,
     summary="Check Report Status",
     responses={
