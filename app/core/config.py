@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     REPORTS_SCHEDULE_HOUR: int = 7
     REPORTS_SCHEDULE_MINUTE: int = 30
 
+    EXPECTED_CHANGE_TTL: int = 300  # 5 minutes in seconds, controls how long the expected change flag is stored in redis
+
     model_config = SettingsConfigDict(
         case_sensitive=True,
         env_file=".env",
