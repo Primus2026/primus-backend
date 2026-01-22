@@ -24,6 +24,8 @@ celery = "^5.6.2"
 redis = "^7.1.0"
 aiofiles = "^23.2.1"
 reportlab = "^4.4.9"
+ultralytics = "^8.3.0"
+opencv-python-headless = "^4.10.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

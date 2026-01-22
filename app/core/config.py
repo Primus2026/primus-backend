@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = "/data/media"
     REPORT_DIR: str = "/data/reports"
+    MODELS_DIR: str = "/data/models"
+    DATASET_DIR: str = "/data/datasets/product_classification"
 
     REPORTS_SCHEDULE_HOUR: int = 7
     REPORTS_SCHEDULE_MINUTE: int = 30
