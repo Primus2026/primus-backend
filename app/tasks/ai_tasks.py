@@ -6,6 +6,12 @@ import asyncio
 from app.database.session import SessionLocal
 from app.database.models.product_definition import ProductDefinition
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
+from app.core.config import settings
 
 logger = get_task_logger(__name__)
 
@@ -25,6 +31,29 @@ def retrain_model_task(self):
         logger.error(f"Error during AI model retraining: {e}")
         # Re-raise the exception so Celery marks it as failed
         raise e
+
+
+async def fetch_product_details_async(product_id: int) -> tuple[str, str]:
+
+    # Create a local engine for this specific asyncio loop
+    engine = create_async_engine(settings.DATABASE_URL)
+    AsyncSessionLocal = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = select(ProductDefinition).where(ProductDefinition.id == product_id)
+            result = await session.execute(stmt)
+            product = result.scalars().first()
+            if product:
+                return product.name, product.barcode
+            return "Unknown", ""
+    except Exception as e:
+        logger.error(f"Async DB fetch error: {e}")
+        return "Error", ""
+    finally:
+        await engine.dispose()
 
 
 @celery_app.task(bind=True, name="app.tasks.ai_tasks.predict_task")
@@ -53,34 +82,23 @@ def predict_task(self, file_path: str):
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        # Fetch product name from DB
+        # Fetch product details from DB
         product_name = "Unknown"
+        product_barcode = ""
         if product_id != -1:
-
-            async def get_name():
-                try:
-                    async with SessionLocal() as session:
-                        stmt = select(ProductDefinition).where(
-                            ProductDefinition.id == product_id
-                        )
-                        result = await session.execute(stmt)
-                        product = result.scalars().first()
-                        return product.name if product else "Unknown"
-                except Exception as e:
-                    logger.error(f"Async DB fetch error: {e}")
-                    return "Error"
-
             try:
-                # Run the async function in a new event loop
-                product_name = asyncio.run(get_name())
+                product_name, product_barcode = asyncio.run(
+                    fetch_product_details_async(product_id)
+                )
             except Exception as e:
-                logger.error(f"Failed to run async loop: {e}")
+                logger.error(f"Failed to run async fetching loop: {e}")
                 product_name = "Error"
 
         return {
             "product_id": product_id,
             "confidence": confidence,
             "name": product_name,
+            "barcode": product_barcode,
         }
     except Exception as e:
         logger.error(f"Error during prediction: {e}")
