@@ -62,7 +62,7 @@ async def recognize_product(
 
 @router.post(
     "/feedback",
-    response_model=TaskRequestResponse,
+    response_model=FeedbackResponse,
     summary="Submit feedback for AI training",
     responses={400: {"description": "File must be an image"}},
 )

@@ -329,11 +329,28 @@ class AIService:
                 # Move new model to target
                 shutil.copy(new_model_path, target_path)
 
+                # Delete the training data used
+                logger.info("Deleting trained data...")
+
+                # Iterate source DATASET_DIR and delete files
+                for class_name in os.listdir(settings.DATASET_DIR):
+                    class_path = os.path.join(settings.DATASET_DIR, class_name)
+                    if not os.path.isdir(class_path):
+                        continue
+
+                    # Delete all files in the class directory
+                    for filename in os.listdir(class_path):
+                        file_path = os.path.join(class_path, filename)
+                        if os.path.isfile(file_path):
+                            os.unlink(file_path)
+
                 # Notify all workers to reload
                 r = RedisClient.get_sync_client()
                 r.publish("ai_model_update", "reload")
                 r.close()
-                logger.info("Model updated and reload signal published.")
+                logger.info(
+                    "Model updated, training data deleted, and reload signal published."
+                )
 
             else:
                 logger.error("Training completed but 'best.pt' was not found.")
