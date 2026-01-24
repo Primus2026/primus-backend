@@ -20,3 +20,12 @@ class RedisClient:
         if cls._instance:
             await cls._instance.close()
             cls._instance = None
+
+    @staticmethod
+    def get_sync_client():
+        import redis
+        return redis.from_url(
+            settings.REDIS_URL,
+            encoding="utf-8",
+            decode_responses=True
+        )
