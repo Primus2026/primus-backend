@@ -103,6 +103,21 @@ async def retrain_model(
     return TaskRequestResponse(task_id=task.id)
 
 
+@router.post("/model/reset", summary="Reset AI Model")
+async def reset_model(
+    db: AsyncSession = Depends(get_db), current_user: Any = Depends(get_current_admin)
+):
+    """
+    Reset the AI model.
+
+    This endpoint deletes cached model files and resets the service. Use this when switching hardware (CPU/GPU) to force a fresh model download.
+    """
+    AIService.reset_model()
+    return {
+        "message": "Model reset successfully. It will be re-initialized on the next request."
+    }
+
+
 @router.post(
     "/training-data/{product_id}",
     response_model=FeedbackResponse,
@@ -129,12 +144,7 @@ async def post_training_data(
     "/task-status/{task_id}",
     response_model=TaskStatusResponse,
     summary="Get retrain status",
-    responses={
-        404: {"description": "Task not found"},
-        409: {
-            "description": "Another worker is currently training. Skipping this request."
-        },
-    },
+    responses={404: {"description": "Task not found"}},
 )
 async def get_task_status(
     task_id: str,

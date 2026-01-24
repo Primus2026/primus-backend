@@ -19,8 +19,14 @@ class AIService:
         """Loads the model once and caches it."""
         if cls._model is None:
             from ultralytics import YOLO
-
             import torch
+
+            # Check for custom fine-tuned model first
+            custom_model_path = os.path.join(settings.MODELS_DIR, "best.pt")
+            if os.path.exists(custom_model_path):
+                logger.info(f"Loading custom fine-tuned model from {custom_model_path}")
+                cls._model = YOLO(custom_model_path)
+                return cls._model
 
             is_gpu = torch.cuda.is_available()
             logger.info(f"GPU Available: {is_gpu}")
@@ -92,6 +98,31 @@ class AIService:
         logger.info("Reloading AI model from disk...")
         cls._model = None
         cls._get_model()
+
+    @classmethod
+    def reset_model(cls):
+        """
+        Deletes all model files from disk and clears the cache to force a fresh download/initialization.
+        Useful when hardware changes (e.g. GPU added/removed).
+        """
+        logger.info("Resetting AI model...")
+        cls._model = None
+
+        # Delete all files in models directory
+        if os.path.exists(settings.MODELS_DIR):
+            for filename in os.listdir(settings.MODELS_DIR):
+                file_path = os.path.join(settings.MODELS_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    logger.error(f"Failed to delete {file_path}: {e}")
+
+        logger.info(
+            "Model files deleted. Application will re-download on next request."
+        )
 
     @classmethod
     async def listen_for_updates(cls):
@@ -279,7 +310,7 @@ class AIService:
                 project=project_dir,
                 name=run_name,
                 exist_ok=True,
-                workers=os.cpu_count() or 4,  # Use all cores for data loading (min 4)
+                workers=0,  # Must be 0 to avoid "daemonic processes are not allowed to have children" in Celery
             )
 
             new_model_path = os.path.join(project_dir, run_name, "weights", "best.pt")
@@ -311,6 +342,8 @@ class AIService:
             logger.error(f"Error during retraining: {e}")
             raise e
         finally:
+            if acquired:
+                lock.release()
             # Cleanup temporary training data
             if os.path.exists(temp_dataset_dir):
                 logger.info(f"Cleaning up temp dataset: {temp_dataset_dir}")
@@ -329,7 +362,7 @@ class AIService:
         os.makedirs(os.path.join(settings.DATASET_DIR, str(product_id)), exist_ok=True)
 
         for file in files:
-            filename = f"{uuid.uuid4().hex}.jpg"
+            filename = f"{uuid.uuid4().hex}.{file.filename.split('.')[-1]}"
             with open(
                 os.path.join(settings.DATASET_DIR, str(product_id), filename), "wb"
             ) as f:
