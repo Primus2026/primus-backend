@@ -82,7 +82,7 @@ async def submit_feedback(
         raise HTTPException(status_code=400, detail="File must be an image")
 
     content = await file.read()
-    await AIService.save_feedback(content, product_id)
+    AIService.save_feedback(content, product_id)
 
     return FeedbackResponse(success=True, message="Feedback saved successfully")
 
