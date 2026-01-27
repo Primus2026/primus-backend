@@ -5,8 +5,10 @@ from app.api.v1.endpoints import product_definition_CRUD
 from app.api.v1.endpoints import reports
 from app.api.v1.endpoints import stock_outbound
 from app.api.v1.endpoints import ai
+from app.api.v1.endpoints import stock
 
 api_router = APIRouter()
+api_router.include_router(stock.router, prefix="/stock", tags=["Stock"])
 api_router.include_router(stock_outbound.router, prefix="/stock/outbound", tags=["Stock Outbound"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])

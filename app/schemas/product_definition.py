@@ -44,8 +44,10 @@ class ProductDefinitionOut(BaseModel):
     dims_y_mm: int
     dims_z_mm: int
     is_dangerous: bool
-    comment: str
+    comment: Optional[str] = None
     expiry_days: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductDefinitionCSVRow(BaseModel):

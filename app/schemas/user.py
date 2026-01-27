@@ -23,4 +23,13 @@ class UserOut(BaseModel):
     email: str 
     role: UserRole 
     is_2fa_enabled: bool 
+ 
     is_active: bool 
+
+    model_config = ConfigDict(from_attributes=True) 
+
+class UserReceiverOut(BaseModel):
+    id: int 
+    email: str 
+
+    model_config = ConfigDict(from_attributes=True) 
