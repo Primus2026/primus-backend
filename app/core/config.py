@@ -26,9 +26,14 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = "/data/media"
     REPORT_DIR: str = "/data/reports"
+    MODELS_DIR: str = "/data/models"
+    DATASET_DIR: str = "/data/datasets/product_classification"
 
     REPORTS_SCHEDULE_HOUR: int = 7
     REPORTS_SCHEDULE_MINUTE: int = 30
+
+    AI_RETRAIN_SCHEDULE_HOUR: int = 2
+    AI_RETRAIN_SCHEDULE_MINUTE: int = 0
 
     EXPECTED_CHANGE_TTL: int = 300  # 5 minutes in seconds, controls how long the expected change flag is stored in redis
 
