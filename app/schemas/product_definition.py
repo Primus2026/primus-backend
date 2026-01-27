@@ -1,5 +1,6 @@
 from pydantic import BaseModel, validator, Field, ConfigDict
 from typing import List, Optional 
+from app.database.models.product_definition import FrequencyClass 
 
 class ProductDefinitionIn(BaseModel):
     name: str = Field(..., description="Name of the product/assortment")
@@ -46,6 +47,7 @@ class ProductDefinitionOut(BaseModel):
     is_dangerous: bool
     comment: Optional[str] = None
     expiry_days: int
+    frequency_class: FrequencyClass
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -26,12 +26,12 @@ router = APIRouter()
 
 @router.post(
     "/",
-    # response_model=ProductDefinitionOut
+    response_model=ProductDefinitionOut
 )
 async def create_product_definition(
     product_definition: ProductDefinitionIn,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Create a new product definition.
@@ -48,7 +48,7 @@ async def create_product_definition(
 async def upload_image(
     product_definition_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
     file: UploadFile = File(...),
 ):
     """
@@ -67,7 +67,7 @@ async def upload_image(
 async def bulk_upload_images(
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Bulk upload images for product definitions.
@@ -105,7 +105,7 @@ async def bulk_upload_images(
 @router.get("/bulk-images/{task_id}", response_model=ProductImportResult)
 async def get_bulk_upload_status(
     task_id: str = Path(...),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Get the status of the bulk upload task.
@@ -139,8 +139,8 @@ async def get_bulk_upload_status(
 async def get_product_definition(
     product_definition_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(
-        deps.get_current_admin
+    user: User = Depends(
+        deps.get_current_user
     ),  # Allow read access to authenticated users or public? adhering to strict for now but easily changeable
 ):
     """
@@ -156,7 +156,7 @@ async def get_product_definitions(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_user),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Get all product definitions.
@@ -170,7 +170,7 @@ async def get_product_definitions(
 async def delete_product_definition(
     product_definition_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Delete a product definition and its associated image.
@@ -186,7 +186,7 @@ async def delete_product_definition(
 async def import_product_definitions_csv(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Import product definitions from a CSV file (Asynchronous).
@@ -204,7 +204,7 @@ async def import_product_definitions_csv(
 @router.get("/import_csv/{task_id}", response_model=ProductImportResult)
 async def get_import_result(
     task_id: str = Path(...),
-    admin: User = Depends(deps.get_current_admin),
+    user: User = Depends(deps.get_current_user),
 ):
     """
     Get the status/result of the import task.

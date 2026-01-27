@@ -18,8 +18,10 @@ class StockOut(BaseModel):
     position_row: int 
     position_col: int 
     entry_date: datetime
-    expiry_dxate: date
+    expiry_date: date
     received_by: UserReceiverOut
+
+    model_config = ConfigDict(from_attributes=True)
 
 class StockItemSimpleOut(BaseModel):
     id: UUID
