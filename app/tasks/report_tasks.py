@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List
+from pathlib import Path
+
 from celery import shared_task
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
@@ -16,18 +18,17 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.config import settings
+import os
+import tempfile
+import aiofiles
 
-async def process_expiry_report_async(task_id: str, rack_id: int | None = None, barcode: str | None = None):
-
-    engine = create_async_engine(settings.DATABASE_URL)
-    AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    
-    async with AsyncSessionLocal() as db:
-        try:
+def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+    try:
+        with SessionLocal() as db:
             # 1. Query Data: Items expiring within 24h or already expired
             now = datetime.now()
             threshold = now + timedelta(hours=24)
-            # Using select() for AsyncSession
+            
             stmt = select(StockItem).join(ProductDefinition).filter(
                 StockItem.expiry_date <= threshold
             )
@@ -42,31 +43,42 @@ async def process_expiry_report_async(task_id: str, rack_id: int | None = None, 
                 selectinload(StockItem.product),
                 selectinload(StockItem.rack)
             )
-            result = await db.execute(stmt)
-            items = result.scalars().all()
+            items = db.execute(stmt).scalars().all()
 
             # 2. Determine Filename
             timestamp = now.strftime("%Y%m%d")
             filename = f"EXPIRY_{timestamp}_{task_id}.pdf"
-            filepath = ReportStorageService._validate_path(filename)
-
-            # 3. Generate PDF
-            ReportService.generate_expiry_pdf(items, filepath)
+            
+            # 3. Generate PDF to Temp File
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                temp_path = Path(tmp.name)
+            
+            try:
+                ReportService.generate_expiry_pdf(items, temp_path)
+                
+                # 4. Upload to Storage (Async)
+                async def upload():
+                    async with aiofiles.open(temp_path, "rb") as f:
+                        content = await f.read()
+                        await ReportStorageService.save_report(filename, content)
+                
+                asyncio.run(upload())
+                
+            finally:
+                if temp_path.exists():
+                    os.remove(temp_path)
 
             return {"filename": filename}
-        finally:
-            await engine.dispose()
+    except Exception as e:
+        print(f"Error generating expiry report: {e}")
+        raise e
 
-async def process_audit_report_async(task_id: str):
-    engine = create_async_engine(settings.DATABASE_URL)
-    AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    
-    async with AsyncSessionLocal() as db:
-        try:
+def process_audit_report(task_id: str):
+    try:
+        with SessionLocal() as db:
             # 1. Fetch Racks (for fill percentage)
             stmt_racks = select(Rack).options(selectinload(Rack.items))
-            racks_result = await db.execute(stmt_racks)
-            racks = racks_result.scalars().all()
+            racks = db.execute(stmt_racks).scalars().all()
             
             # 2. Product Audit (Inventory)
             stmt_items = select(StockItem).options(
@@ -74,34 +86,41 @@ async def process_audit_report_async(task_id: str):
                 selectinload(StockItem.rack),
                 selectinload(StockItem.receiver)
             )
-            
-            items_result = await db.execute(stmt_items)
-            items = items_result.scalars().all()
+            items = db.execute(stmt_items).scalars().all()
             
             # 3. Alerts (Unresolved)
             stmt_alerts = select(Alert).where(Alert.is_resolved == False).options(
                 selectinload(Alert.rack),
                 selectinload(Alert.product)
             ).order_by(Alert.created_at.desc())
-             
-            alerts_result = await db.execute(stmt_alerts)
-            alerts = alerts_result.scalars().all()
+            alerts = db.execute(stmt_alerts).scalars().all()
 
             # 4. Generate PDF
             timestamp = datetime.now().strftime("%Y%m%d")
             filename = f"AUDIT_{timestamp}_{task_id}.pdf"
-            # Use ReportStorageService to get path
-            filepath = ReportStorageService._validate_path(filename)
             
-            ReportService.generate_audit_pdf(racks, items, alerts, filepath)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                temp_path = Path(tmp.name)
+            
+            try:
+                ReportService.generate_audit_pdf(racks, items, alerts, temp_path)
+                
+                async def upload():
+                     async with aiofiles.open(temp_path, "rb") as f:
+                        content = await f.read()
+                        await ReportStorageService.save_report(filename, content)
+                
+                asyncio.run(upload())
+            finally:
+                if temp_path.exists():
+                    os.remove(temp_path)
             
             return {"filename": filename}
         
-        except Exception as e:
-            print(f"Error generating audit report: {e}")
-            raise e
-        finally:
-            await engine.dispose() 
+    except Exception as e:
+        print(f"Error generating audit report: {e}")
+        raise e
+ 
 
 @celery_app.task(bind=True)
 def generate_expiry_report_task(self,rack_id: int | None = None, barcode: str | None = None):
@@ -110,7 +129,7 @@ def generate_expiry_report_task(self,rack_id: int | None = None, barcode: str | 
     Returns: {"filename": "..."}
     """
     task_id = self.request.id
-    return asyncio.run(process_expiry_report_async(task_id, rack_id, barcode))
+    return process_expiry_report(task_id, rack_id, barcode)
 
 @celery_app.task(bind=True)
 def generate_audit_report_task(self):
@@ -119,12 +138,11 @@ def generate_audit_report_task(self):
     Returns: {"filename": "..."}
     """
     task_id = self.request.id
-    return asyncio.run(process_audit_report_async(task_id))
+    return process_audit_report(task_id)
 
 @celery_app.task
 def cleanup_old_reports_task():
     """
     Deletes reports older than 7 days.
     """
-    count = ReportStorageService.cleanup_old_reports(days=7)
-    return {"deleted_count": count}
+    return asyncio.run(ReportStorageService.cleanup_old_reports(days=7))
