@@ -7,6 +7,9 @@ import random
 from typing import List
 from fastapi import UploadFile, HTTPException
 from app.core.redis_client import RedisClient
+from app.core.storage import storage
+import aiofiles
+import asyncio
 
 logger = logging.getLogger("AI_Service")
 
@@ -22,58 +25,57 @@ class AIService:
             import torch
 
             # Check for custom fine-tuned model first
-            custom_model_path = os.path.join(settings.MODELS_DIR, "best.pt")
-            if os.path.exists(custom_model_path):
-                logger.info(f"Loading custom fine-tuned model from {custom_model_path}")
-                cls._model = YOLO(custom_model_path)
-                return cls._model
+            custom_model_local_path = os.path.join(settings.MODELS_DIR, "best.pt")
+            os.makedirs(settings.MODELS_DIR, exist_ok=True)
+            
+            # Helper to check storage and download
+            async def check_and_download_model():
+                if await storage.exists("models/best.pt"):
+                     logger.info("Found best.pt in storage. Downloading...")
+                     content = await storage.get("models/best.pt")
+                     async with aiofiles.open(custom_model_local_path, "wb") as f:
+                         await f.write(content)
+                     return True
+                else:
+                     logger.info("Custom model 'best.pt' NOT found in storage.")
+                     return False
+            
+            storage_model_exists = False
+            try:
+                storage_model_exists = asyncio.run(check_and_download_model())
+            except Exception as e:
+                logger.warning(f"Failed to check storage for model: {e}")
 
+            
+            if storage_model_exists and os.path.exists(custom_model_local_path):
+                logger.info(f"Loading custom fine-tuned model from {custom_model_local_path}")
+                cls._model = YOLO(custom_model_local_path)
+                return cls._model
+            elif not storage_model_exists and os.path.exists(custom_model_local_path):
+                logger.warning("Local custom model found but not present in storage. Ignoring local model and using base model.")
+            
+            # Fallback to base model
             is_gpu = torch.cuda.is_available()
             logger.info(f"GPU Available: {is_gpu}")
 
             if is_gpu:
                 model_name = "yolo11m-cls.pt"
-                logger.info(
-                    "GPU detected. Using Medium model (yolo11m-cls.pt) for better accuracy."
-                )
-                # Download URL for YoloV11 Medium
                 url = "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m-cls.pt"
             else:
                 model_name = "yolo11n-cls.pt"
-                logger.info(
-                    "No GPU detected. Using Nano model (yolo11n-cls.pt) for speed."
-                )
                 url = "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n-cls.pt"
 
             model_path = os.path.join(settings.MODELS_DIR, model_name)
-
-            # Ensure models directory exists
-            os.makedirs(settings.MODELS_DIR, exist_ok=True)
-
+            
             if not os.path.exists(model_path):
-                logger.info(f"Model '{model_name}' not found. Downloading...")
-                try:
-                    # Manual download to avoid CWD permission issues
-                    import requests
+                 logger.info(f"Model '{model_name}' not found. Downloading...")
+                 import requests
+                 response = requests.get(url, stream=True)
+                 response.raise_for_status()
+                 with open(model_path + ".tmp", "wb") as f:
+                     shutil.copyfileobj(response.raw, f)
+                 shutil.move(model_path + ".tmp", model_path)
 
-                    logger.info(f"Downloading from {url}...")
-                    response = requests.get(url, stream=True)
-                    response.raise_for_status()
-
-                    # Download to temp file first
-                    temp_path = model_path + ".tmp"
-                    with open(temp_path, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-
-                    shutil.move(temp_path, model_path)
-                    logger.info("Download complete.")
-
-                except Exception as e:
-                    logger.error(f"Failed to download model: {e}")
-                    raise Exception(f"Could not find or download model {model_name}")
-
-            # Initialize model
             cls._model = YOLO(model_path)
 
         return cls._model
@@ -140,6 +142,7 @@ class AIService:
                     data = message["data"]
                     if data == "reload":
                         logger.info("Received reload signal. Reloading model...")
+                    if data == "reload":
                         cls.reload_model()
         except Exception as e:
             logger.error(f"Error in AI model update listener: {e}")
@@ -152,7 +155,7 @@ class AIService:
         try:
             from PIL import Image
             from PIL import UnidentifiedImageError
-
+            # Check file using PIL - sync op
             with Image.open(tmp_file) as img:
                 img.verify()  # Verify file integrity
         except (UnidentifiedImageError, OSError) as e:
@@ -161,6 +164,8 @@ class AIService:
 
         model = cls._get_model()
         imgsz = cls.get_preferred_image_size()
+        
+        # Sync Prediction
         results = model(tmp_file, imgsz=imgsz)
 
         product_id = -1
@@ -168,46 +173,77 @@ class AIService:
 
         if results and results[0].probs:
             # Assuming classification model
-
-            # Get top prediction
             top1_idx = results[0].probs.top1
             confidence = float(results[0].probs.top1conf)
-
-            # Check if class name is parsable as an ID
-            # results[0].names is a dict {0: 'name', ...}
             class_name = results[0].names[top1_idx]
-
-            # Try to parse class name as product ID or handle mapping
             if str(class_name).isdigit():
                 product_id = int(class_name)
 
         return product_id, confidence
 
     @staticmethod
-    def save_feedback(content: bytes, product_id: int):
-
-        os.makedirs(settings.DATASET_DIR, exist_ok=True)
-        os.makedirs(os.path.join(settings.DATASET_DIR, str(product_id)), exist_ok=True)
-
+    async def save_feedback(content: bytes, product_id: int):
         filename = f"{uuid.uuid4()}.jpg"
-        with open(
-            os.path.join(settings.DATASET_DIR, str(product_id), filename), "wb"
-        ) as f:
-            f.write(content)
+        # Store in datasets bucket: datasets/product_id/filename.jpg
+        path = f"datasets/{product_id}/{filename}"
+        await storage.save(path, content)
 
     @staticmethod
-    def _prepare_training_dataset(
-        source_dir: str, dest_dir: str, split_ratio: float = 0.8
-    ):
+    def _download_dataset(dest_dir: str) -> bool:
         """
-        Creates a train/val split structure from a flat dataset directory.
+        Downloads valid training images from storage to local dest_dir.
+        Returns True if data found.
         """
         if os.path.exists(dest_dir):
             shutil.rmtree(dest_dir)
+        os.makedirs(dest_dir, exist_ok=True)
+        
+        import asyncio
+        import aiofiles
 
+        async def _download_logic():
+            # List all files under datasets/
+            files = await storage.list("datasets/", recursive=True)
+            has_data = False
+            
+            for file_info in files:
+                rel_name = file_info["name"] 
+                if not rel_name.strip():
+                     continue
+                
+                ext = os.path.splitext(rel_name)[1].lower()
+                if ext not in [".png", ".jpg", ".jpeg", ".bmp", ".webp"]:
+                    continue
+                
+                local_dest = os.path.join(dest_dir, rel_name)
+                os.makedirs(os.path.dirname(local_dest), exist_ok=True)
+                
+                storage_path = f"datasets/{rel_name}"
+                try:
+                    content = await storage.get(storage_path)
+                    async with aiofiles.open(local_dest, "wb") as f:
+                        await f.write(content)
+                    has_data = True
+                except Exception as e:
+                    logger.error(f"Failed to download {storage_path}: {e}")
+            return has_data
+
+        return asyncio.run(_download_logic())
+
+    @staticmethod
+    def _prepare_split_dataset(
+        source_dir: str, dest_dir: str, split_ratio: float = 0.8
+    ):
+        """
+        Creates a train/val split structure from dataset directory.
+        source_dir: Directory containing "class_name/image.jpg"
+        dest_dir: Target directory for train/val structure
+        """
+        if os.path.exists(dest_dir):
+            shutil.rmtree(dest_dir)
+        
         train_dir = os.path.join(dest_dir, "train")
         val_dir = os.path.join(dest_dir, "val")
-
         os.makedirs(train_dir, exist_ok=True)
         os.makedirs(val_dir, exist_ok=True)
 
@@ -218,7 +254,7 @@ class AIService:
             class_path = os.path.join(source_dir, class_name)
             if not os.path.isdir(class_path):
                 continue
-
+            
             # Create class dirs in train/val
             os.makedirs(os.path.join(train_dir, class_name), exist_ok=True)
             os.makedirs(os.path.join(val_dir, class_name), exist_ok=True)
@@ -228,160 +264,121 @@ class AIService:
                 for f in os.listdir(class_path)
                 if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".webp"))
             ]
+            
+            # Filter out empty files?
+            
             random.shuffle(images)
             if images:
                 has_data = True
 
-            # Ensure at least 1 image goes to training if we have content
+            # Ensure at least 1 image goes to training
             split_idx = int(len(images) * split_ratio)
             if split_idx == 0 and len(images) > 0:
                 split_idx = 1
+            
 
             train_imgs = images[:split_idx]
             val_imgs = images[split_idx:]
-
-            if not val_imgs:
-                from fastapi import HTTPException
-
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Dataset too small for class '{class_name}'. Must have at least 2 images to perform a train/val split. Found {len(images)} images.",
-                )
-
+            
+            # Copy files
             for img in train_imgs:
-                shutil.copy2(
-                    os.path.join(class_path, img),
-                    os.path.join(train_dir, class_name, img),
-                )
-
+                shutil.copy2(os.path.join(class_path, img), os.path.join(train_dir, class_name, img))
             for img in val_imgs:
-                shutil.copy2(
-                    os.path.join(class_path, img),
-                    os.path.join(val_dir, class_name, img),
-                )
+                shutil.copy2(os.path.join(class_path, img), os.path.join(val_dir, class_name, img))
 
         return has_data
 
     @classmethod
     def retrain_model(cls):
         """
-        Retrains the model using the dataset directory.
-        This method should be called from a celery task.
+        Retrains the model using the dataset from storage.
         """
         r = RedisClient.get_sync_client()
-        # Lock expires in 1 hour to prevent permanent deadlocks if worker crashes
         lock = r.lock("training_lock", timeout=3600)
-
         acquired = lock.acquire(blocking=False)
         if not acquired:
-            logger.warning(
-                "Another worker is currently training. Skipping this request."
-            )
-            raise HTTPException(
-                status_code=409,
-                detail="Another worker is currently training. Skipping this request.",
-            )
+            logger.warning("Another worker is currently training. Skipping.")
+            return
 
         logger.info("Starting model retraining...")
-
-        # Temp dir for split dataset
-        temp_dataset_dir = os.path.join(
-            "/data", "temp", "training_data_" + str(uuid.uuid4())
-        )
+        
+        session_id = str(uuid.uuid4())
+        raw_dataset_dir = os.path.join("/data", "temp", f"raw_data_{session_id}")
+        split_dataset_dir = os.path.join("/data", "temp", f"split_data_{session_id}")
         project_dir = os.path.join(settings.MODELS_DIR, "training_runs")
-        run_name = "latest_run"
+        run_name = f"run_{session_id}"
+
+        import asyncio
+        import aiofiles
 
         try:
-            has_data = cls._prepare_training_dataset(
-                settings.DATASET_DIR, temp_dataset_dir
-            )
-
+            # 1. Download
+            logger.info(f"Downloading dataset to {raw_dataset_dir}...")
+            has_data = cls._download_dataset(raw_dataset_dir) # Now sync
             if not has_data:
-                logger.warning("No training data found. Skipping retraining.")
+                logger.warning("No training data found. Skipping.")
                 return
 
-            model = cls._get_model()  # Continue from current best
-
-            # Train using the temp split directory
-            results = model.train(
-                data=temp_dataset_dir,
+            # 2. Split
+            logger.info(f"Splitting dataset to {split_dataset_dir}...")
+            cls._prepare_split_dataset(raw_dataset_dir, split_dataset_dir)
+            
+            # 3. Train
+            model = cls._get_model() # Sync
+            
+            # Run training (sync)
+            logger.info("Starting YOLO training...")
+            model.train(
+                data=split_dataset_dir,
                 epochs=10,
                 imgsz=cls.get_preferred_image_size(),
                 project=project_dir,
                 name=run_name,
                 exist_ok=True,
-                workers=0,  # Must be 0 to avoid "daemonic processes are not allowed to have children" in Celery
+                workers=0, 
             )
-
+            
+            # 4. Upload best.pt
             new_model_path = os.path.join(project_dir, run_name, "weights", "best.pt")
-            target_path = os.path.join(settings.MODELS_DIR, "best.pt")
-            backup_path = os.path.join(settings.MODELS_DIR, "best.pt.bak")
+            
+            async def upload_artifacts():
+                if os.path.exists(new_model_path):
+                    logger.info("Training completed. Uploading best.pt to storage...")
+                    async with aiofiles.open(new_model_path, "rb") as f:
+                        content = await f.read()
+                        await storage.save("models/best.pt", content)
+                    
+                    logger.info("Deleting training data from storage...")
+                    files = await storage.list("datasets/", recursive=True)
+                    for f in files:
+                         await storage.delete(f"datasets/{f['name']}")
+                    return True
+                return False
 
-            if os.path.exists(new_model_path):
-                logger.info(
-                    f"Training completed. New model found at {new_model_path}. Updating..."
-                )
+            success = asyncio.run(upload_artifacts())
 
-                # Backup old model
-                if os.path.exists(target_path):
-                    shutil.move(target_path, backup_path)
-
-                # Move new model to target
-                shutil.copy(new_model_path, target_path)
-
-                # Delete the training data used
-                logger.info("Deleting trained data...")
-
-                # Iterate source DATASET_DIR and delete files
-                for class_name in os.listdir(settings.DATASET_DIR):
-                    class_path = os.path.join(settings.DATASET_DIR, class_name)
-                    if not os.path.isdir(class_path):
-                        continue
-
-                    # Delete all files in the class directory
-                    for filename in os.listdir(class_path):
-                        file_path = os.path.join(class_path, filename)
-                        if os.path.isfile(file_path):
-                            os.unlink(file_path)
-
-                # Notify all workers to reload
-                r = RedisClient.get_sync_client()
+            if success:
                 r.publish("ai_model_update", "reload")
-                r.close()
-                logger.info(
-                    "Model updated, training data deleted, and reload signal published."
-                )
-
+                logger.info("Reload signal published.")
             else:
-                logger.error("Training completed but 'best.pt' was not found.")
+                 logger.error("Training completed but 'best.pt' not found.")
 
         except Exception as e:
             logger.error(f"Error during retraining: {e}")
             raise e
         finally:
-            if acquired:
-                lock.release()
-            # Cleanup temporary training data
-            if os.path.exists(temp_dataset_dir):
-                logger.info(f"Cleaning up temp dataset: {temp_dataset_dir}")
-                shutil.rmtree(temp_dataset_dir)
-
-            # Cleanup training run artifacts to free space
-            run_dir = os.path.join(project_dir, run_name)
-            if os.path.exists(run_dir):
-                logger.info(f"Cleaning up training artifacts: {run_dir}")
-                shutil.rmtree(run_dir)
+             if acquired:
+                 lock.release()
+             # Cleanup local temp
+             if os.path.exists(raw_dataset_dir): shutil.rmtree(raw_dataset_dir)
+             if os.path.exists(split_dataset_dir): shutil.rmtree(split_dataset_dir)
+             run_dir = os.path.join(project_dir, run_name)
+             if os.path.exists(run_dir): shutil.rmtree(run_dir)
 
     @classmethod
     async def bulk_save_training_data(cls, files: List[UploadFile], product_id: int):
-
-        os.makedirs(settings.DATASET_DIR, exist_ok=True)
-        os.makedirs(os.path.join(settings.DATASET_DIR, str(product_id)), exist_ok=True)
-
         for file in files:
             filename = f"{uuid.uuid4().hex}.{file.filename.split('.')[-1]}"
-            with open(
-                os.path.join(settings.DATASET_DIR, str(product_id), filename), "wb"
-            ) as f:
-                content = await file.read()
-                f.write(content)
+            path = f"datasets/{product_id}/{filename}"
+            content = await file.read()
+            await storage.save(path, content)
