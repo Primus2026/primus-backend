@@ -140,3 +140,16 @@ async def get_rack(
     Can only be executed by an admin user.
     """
     return await RackService.get_rack(db, rack_id)
+
+
+@router.get("/", response_model=list[RackOut])
+async def get_all_racks(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+): 
+    """
+    Get all racks.
+    
+    Can only be executed by an admin user.
+    """
+    return await RackService.get_all_racks(db)
