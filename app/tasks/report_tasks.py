@@ -22,9 +22,17 @@ import os
 import tempfile
 import aiofiles
 
-def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+def run_async(coro):
     try:
-        with SessionLocal() as db:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
+
+async def _process_expiry_report_async(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+    try:
+        async with SessionLocal() as db:
             # 1. Query Data: Items expiring within 24h or already expired
             now = datetime.now()
             threshold = now + timedelta(hours=24)
@@ -43,7 +51,8 @@ def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str
                 selectinload(StockItem.product),
                 selectinload(StockItem.rack)
             )
-            items = db.execute(stmt).scalars().all()
+            result = await db.execute(stmt)
+            items = result.scalars().all()
 
             # 2. Determine Filename
             timestamp = now.strftime("%Y%m%d")
@@ -54,15 +63,15 @@ def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str
                 temp_path = Path(tmp.name)
             
             try:
+                # Report generation is CPU-bound (ReportLab), so we can run it in a thread or just synchronously 
+                # since it doesn't block the async loop significantly for small reports, 
+                # but better to keep it as is.
                 ReportService.generate_expiry_pdf(items, temp_path)
                 
                 # 4. Upload to Storage (Async)
-                async def upload():
-                    async with aiofiles.open(temp_path, "rb") as f:
-                        content = await f.read()
-                        await ReportStorageService.save_report(filename, content)
-                
-                asyncio.run(upload())
+                async with aiofiles.open(temp_path, "rb") as f:
+                    content = await f.read()
+                    await ReportStorageService.save_report(filename, content)
                 
             finally:
                 if temp_path.exists():
@@ -73,12 +82,16 @@ def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str
         print(f"Error generating expiry report: {e}")
         raise e
 
-def process_audit_report(task_id: str):
+def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+    return run_async(_process_expiry_report_async(task_id, rack_id, barcode))
+
+async def _process_audit_report_async(task_id: str):
     try:
-        with SessionLocal() as db:
+        async with SessionLocal() as db:
             # 1. Fetch Racks (for fill percentage)
             stmt_racks = select(Rack).options(selectinload(Rack.items))
-            racks = db.execute(stmt_racks).scalars().all()
+            result_racks = await db.execute(stmt_racks)
+            racks = result_racks.scalars().all()
             
             # 2. Product Audit (Inventory)
             stmt_items = select(StockItem).options(
@@ -86,14 +99,16 @@ def process_audit_report(task_id: str):
                 selectinload(StockItem.rack),
                 selectinload(StockItem.receiver)
             )
-            items = db.execute(stmt_items).scalars().all()
+            result_items = await db.execute(stmt_items)
+            items = result_items.scalars().all()
             
             # 3. Alerts (Unresolved)
             stmt_alerts = select(Alert).where(Alert.is_resolved == False).options(
                 selectinload(Alert.rack),
                 selectinload(Alert.product)
             ).order_by(Alert.created_at.desc())
-            alerts = db.execute(stmt_alerts).scalars().all()
+            result_alerts = await db.execute(stmt_alerts)
+            alerts = result_alerts.scalars().all()
 
             # 4. Generate PDF
             timestamp = datetime.now().strftime("%Y%m%d")
@@ -105,12 +120,10 @@ def process_audit_report(task_id: str):
             try:
                 ReportService.generate_audit_pdf(racks, items, alerts, temp_path)
                 
-                async def upload():
-                     async with aiofiles.open(temp_path, "rb") as f:
-                        content = await f.read()
-                        await ReportStorageService.save_report(filename, content)
+                async with aiofiles.open(temp_path, "rb") as f:
+                    content = await f.read()
+                    await ReportStorageService.save_report(filename, content)
                 
-                asyncio.run(upload())
             finally:
                 if temp_path.exists():
                     os.remove(temp_path)
@@ -120,7 +133,10 @@ def process_audit_report(task_id: str):
     except Exception as e:
         print(f"Error generating audit report: {e}")
         raise e
- 
+
+def process_audit_report(task_id: str):
+    return run_async(_process_audit_report_async(task_id))
+
 
 @celery_app.task(bind=True)
 def generate_expiry_report_task(self,rack_id: int | None = None, barcode: str | None = None):
@@ -145,4 +161,4 @@ def cleanup_old_reports_task():
     """
     Deletes reports older than 7 days.
     """
-    return asyncio.run(ReportStorageService.cleanup_old_reports(days=7))
+    return run_async(ReportStorageService.cleanup_old_reports(days=7))

@@ -134,7 +134,7 @@ async def test_upload_image_single(async_client: AsyncClient, admin_token: str, 
         assert response.status_code == 200
         data = response.json()
         assert data["photo_path"] is not None
-        assert "product_images/" in data["photo_path"]
+        assert "product-images/" in data["photo_path"]
         
         # Verify storage.save was called
         mock_save.assert_called_once()
