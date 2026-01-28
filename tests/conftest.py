@@ -10,6 +10,10 @@ from app.database.session import get_db
 from app.database.models.base import Base
 from app.core.config import settings
 
+from unittest.mock import MagicMock, patch, AsyncMock
+import tempfile
+import shutil
+from app.core.storage.s3 import S3StorageProvider
 # Use in-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -103,3 +107,40 @@ async def authorized_admin_client(async_client: AsyncClient, admin_token: str) -
 async def authorized_warehouseman_client(async_client: AsyncClient, warehouseman_token: str) -> AsyncClient:
     async_client.headers.update({"Authorization": f"Bearer {warehouseman_token}"})
     return async_client
+
+@pytest.fixture
+def s3_provider():
+    with patch("aiobotocore.session.get_session") as mock_session:
+        provider = S3StorageProvider()
+        return provider
+
+@pytest.fixture
+def mock_storage():
+    """Patches storage in AI Service"""
+    with patch("app.services.ai_service.storage", new_callable=AsyncMock) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_yolo():
+    with patch("ultralytics.YOLO") as mock:
+        yield mock
+
+@pytest.fixture
+def mock_redis():
+    with patch("app.core.redis_client.RedisClient.get_sync_client") as mock_sync, \
+         patch("app.core.redis_client.RedisClient.get_client") as mock_async:
+        mock_lock = MagicMock()
+        mock_lock.acquire.return_value = True
+        mock_sync.return_value.lock.return_value = mock_lock
+        yield mock_sync
+
+@pytest.fixture
+def temp_models_dir():
+    # Create a temp dir for models
+    d = tempfile.mkdtemp()
+    old_dir = settings.MODELS_DIR
+    settings.MODELS_DIR = d
+    yield d
+    # Cleanup
+    settings.MODELS_DIR = old_dir
+    shutil.rmtree(d)

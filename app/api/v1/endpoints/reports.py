@@ -107,14 +107,23 @@ def get_report_status(
         401: {"description": "Not authenticated"},
     },
 )
-def list_reports(
+@router.get(
+    "/",
+    response_model=List[ReportResponse],
+    summary="List Reports",
+    responses={
+        200: {"description": "List of reports retrieved successfully"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_reports(
     type_filter: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """
     List available reports in storage.
     """
-    return ReportStorageService.list_reports(type_filter)
+    return await ReportStorageService.list_reports(type_filter)
 
 @router.get(
     "/download/{filename}",
@@ -125,17 +134,19 @@ def list_reports(
         404: {"description": "Report not found"},
     },
 )
-def download_report(
+async def download_report(
     filename: str,
     current_user: User = Depends(get_current_user)
 ):
     """
     Download a specific report file.
     """
-    path = ReportStorageService.get_report_path(filename)
+    from fastapi import Response
+    content = await ReportStorageService.get_report_content(filename)
     # Stream the file
-    return FileResponse(
-        path=path, 
-        filename=filename, 
-        media_type='application/pdf'
+    return Response(
+        content=content, 
+        media_type='application/pdf',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+

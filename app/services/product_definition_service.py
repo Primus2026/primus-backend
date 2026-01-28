@@ -8,6 +8,7 @@ import os
 import aiofiles
 import uuid
 from app.core.config import settings
+from app.core.storage import storage
 
 class ProductDefinitionService:
     @staticmethod 
@@ -63,34 +64,23 @@ class ProductDefinitionService:
         if not product_definition:
             raise HTTPException(status_code=404, detail="Product definition not found")
         
-        # 1. Define base upload directory
-        # Using the standard path defined in Dockerfile/docker-compose
-        upload_dir = Path(settings.MEDIA_ROOT) / "product_images"
-        
-        # 2. Bezpieczne tworzenie folderu
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # 3. Generowanie nazwy i ścieżki
+        # 1. Generate filename and path
         file_extension = os.path.splitext(file.filename)[1]
         if not file_extension:
             file_extension = ".jpg" # fallback
             
         new_filename = f"{uuid.uuid4()}{file_extension}"
-        file_path = upload_dir / new_filename
         
-        # 4. Zapisywanie pliku z obsługą błędów
+        # Store as: product_images/UUID.jpg
+        relative_path = f"product-images/{new_filename}" 
+        
+        # 2. Save file using storage provider
         try:
-            async with aiofiles.open(str(file_path), 'wb') as out_file:
-                # Reset kursora (na wypadek gdyby plik był czytany wcześniej)
-                await file.seek(0)
-                content = await file.read()
-                await out_file.write(content)
+            await storage.save(relative_path, file)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
             
-        # 5. Zapisujemy w DB ścieżkę relatywną (łatwiej potem serwować pliki)
-        # Zapisujemy np: "product_images/unique_name.jpg"
-        relative_path = os.path.join("product_images", new_filename)
+        # 3. Update DB
         
         product_definition.photo_path = relative_path
         db.add(product_definition)
@@ -109,24 +99,24 @@ class ProductDefinitionService:
         Moves a file from a local temporary path to the final destination 
         and updates the product definition.
         """
-        upload_dir = Path(settings.MEDIA_ROOT) / "product_images"
-        os.makedirs(upload_dir, exist_ok=True)
-        
         file_extension = os.path.splitext(local_file_path.name)[1]
         if not file_extension:
             file_extension = ".jpg" 
         
         new_filename = f"{uuid.uuid4()}{file_extension}"
-        final_path = upload_dir / new_filename
+        relative_path = f"product-images/{new_filename}"
         
         try:
-            # We use shutil.move for atomic-ish move if on same filesystem, or copy+del
-            import shutil
-            shutil.move(str(local_file_path), str(final_path))
-        except Exception as e:
-            raise Exception(f"Failed to move file {local_file_path} to {final_path}: {e}")
+            # Read local file and upload
+            async with aiofiles.open(local_file_path, 'rb') as f:
+                content = await f.read()
+                await storage.save(relative_path, content)
             
-        relative_path = os.path.join("product_images", new_filename)
+            # Clean up local file because this function implies a "move" or consumption of temp file
+            os.remove(local_file_path)
+
+        except Exception as e:
+            raise Exception(f"Failed to upload file {local_file_path} to storage: {e}")
         product_definition.photo_path = relative_path
         db.add(product_definition)
         # Commit should be handled by caller usually for bulk invoke, 
@@ -169,21 +159,16 @@ class ProductDefinitionService:
         # Delete image file if it exists
         if product_definition.photo_path:
             # photo_path is stored as "product_images/filename.jpg"
-            # We need to prepend "/app/media/" to get full path
-            # strip leading slash just in case to ensure it's treated as relative
             clean_rel_path = product_definition.photo_path.lstrip('/')
-            full_path = Path(settings.MEDIA_ROOT) / clean_rel_path
             
-            print(f"Attempting to delete image at: {full_path}") # LOGGING
+            print(f"Attempting to delete image at: {clean_rel_path}") # LOGGING
             
-            if full_path.exists():
-                try:
-                    os.remove(full_path)
-                    print(f"Successfully deleted photo: {full_path}")
-                except OSError as e:
-                    print(f"Error deleting file {full_path}: {e}")
-            else:
-                print(f"File not found at: {full_path}")
+            # It's safer to just try delete and ignore errors if not found
+            try:
+                await storage.delete(clean_rel_path)
+                print(f"Successfully deleted photo: {clean_rel_path}")
+            except Exception as e:
+                 print(f"Error deleting file {clean_rel_path}: {e}")
 
         await db.delete(product_definition)
         await db.commit()
@@ -220,10 +205,6 @@ class ProductDefinitionService:
                 # Filter out None keys if any (trailing semicolons)
                 clean_row = {k: v for k, v in row_dict.items() if k and k.strip()}
                 try:
-                    # Treat empty strings as None? Pydantic expects correct types.
-                    # bool conversion: "FALSE" -> False
-                    # We rely on Pydantic's coercion, but "FALSE" string might need help if strict
-                    # Check if manual conversion is needed for booleans
                     if "CzyNiebezpieczny" in clean_row:
                         val = clean_row["CzyNiebezpieczny"].upper()
                         if val == "TRUE": clean_row["CzyNiebezpieczny"] = True

@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from app.database.models import ProductDefinition, UserRole
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 @pytest.fixture
 async def sample_product_definition(db_session: AsyncSession):
@@ -121,16 +121,23 @@ async def test_upload_image_single(async_client: AsyncClient, admin_token: str, 
     # We use a real file I/O since we can control MEDIA_ROOT in tests
     files = {"file": ("test.jpg", b"fake_image_content", "image/jpeg")}
     
-    response = await async_client.post(
-        f"/api/v1/product_definitions/{sample_product_definition.id}/upload_image",
-        files=files,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert data["photo_path"] is not None
-    assert "product_images/" in data["photo_path"]
+    # Mock the storage.save method
+    with patch("app.services.product_definition_service.storage.save", new_callable=AsyncMock) as mock_save:
+        mock_save.return_value = "product_images/test.jpg"
+        
+        response = await async_client.post(
+            f"/api/v1/product_definitions/{sample_product_definition.id}/upload_image",
+            files=files,
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["photo_path"] is not None
+        assert "product-images/" in data["photo_path"]
+        
+        # Verify storage.save was called
+        mock_save.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_get_product_definition_not_found(async_client: AsyncClient, admin_token: str):

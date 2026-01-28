@@ -45,17 +45,17 @@ async def recognize_product(
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
-    temp_dir = os.path.join(settings.MEDIA_ROOT, "temp_uploads")
-    os.makedirs(temp_dir, exist_ok=True)
-
+    from app.core.storage import storage
+    
+    # Upload to storage/temp
     filename = f"{uuid.uuid4()}.jpg"
-    file_path = os.path.join(temp_dir, filename)
+    s3_key = f"temp/{filename}"
+    
+    content = await file.read()
+    await storage.save(s3_key, content)
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Send task
-    task = predict_task.delay(file_path)
+    # Send task with S3 key
+    task = predict_task.delay(s3_key)
 
     return TaskRequestResponse(task_id=task.id)
 
@@ -82,7 +82,7 @@ async def submit_feedback(
         raise HTTPException(status_code=400, detail="File must be an image")
 
     content = await file.read()
-    AIService.save_feedback(content, product_id)
+    await AIService.save_feedback(content, product_id)
 
     return FeedbackResponse(success=True, message="Feedback saved successfully")
 
