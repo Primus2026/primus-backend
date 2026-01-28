@@ -12,7 +12,9 @@ from app.database.session import get_db
 from app.core.config import settings
 from sqlalchemy.orm import selectinload
 from app.database.models.rack import Rack
+from app.database.models.rack import Rack
 import logging
+from app.services.product_stats_service import ProductStatsService
 
 logger = logging.getLogger("STOCK_SERVICE")
 
@@ -95,6 +97,9 @@ class StockService:
         if item:
             await db.delete(item)
             await db.commit()
+            
+            # Update product stats
+            await ProductStatsService.update_product_stats(db, item.product_id, 1, redis_client)
 
         # Remove the cached weight (equal to 0 for the mqtt listiner)
         await redis_client.delete(
@@ -202,7 +207,7 @@ class StockService:
         return results
 
     @staticmethod
-    async def outbound_stock_item_manual(rack_location: RackLocationManual, db: AsyncSession):
+    async def outbound_stock_item_manual(rack_location: RackLocationManual, db: AsyncSession, redis_client: Redis):
         rack = await db.execute(
             select(Rack)
             .where(
@@ -233,5 +238,8 @@ class StockService:
         
         await db.delete(stock_item)
         await db.commit()
+        
+        # Update product stats
+        await ProductStatsService.update_product_stats(db, stock_item.product_id, 1, redis_client)
         
         return Msg(message="Stock item removed successfully")        

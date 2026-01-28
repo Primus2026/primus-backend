@@ -24,4 +24,4 @@ class ProductDefinition(Base):
     is_dangerous: Mapped[bool] = mapped_column(Boolean, default=False)
     comment: Mapped[str] = mapped_column(String(255), nullable=True)
     expiry_days: Mapped[int] = mapped_column(Integer)
-    frequency_class: Mapped[FrequencyClass] = mapped_column(SQLAlchemyEnum(FrequencyClass), default=FrequencyClass.C)
+    frequency_class: Mapped[FrequencyClass] = mapped_column(SQLAlchemyEnum(FrequencyClass), default=FrequencyClass.C, server_default=FrequencyClass.C.value)

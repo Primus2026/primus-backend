@@ -76,6 +76,7 @@ async def outbound_stock_item_manual(
     rack_location: RackLocationManual,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(deps.get_current_admin),
+    redis_client: Redis = Depends(deps.get_redis),
 ):
     """
     Manually confirm the outbound process for a stock item
@@ -86,4 +87,4 @@ async def outbound_stock_item_manual(
     Returns a message indicating success
     """
 
-    return await StockService.outbound_stock_item_manual(rack_location, db)
+    return await StockService.outbound_stock_item_manual(rack_location, db, redis_client)
