@@ -13,6 +13,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from app.core.config import settings
 
+import tempfile
+import uuid
+import asyncio
+import aiofiles
+from app.core.storage import storage
+
 logger = get_task_logger(__name__)
 
 
@@ -23,7 +29,6 @@ def retrain_model_task(self):
     """
     logger.info("Starting AI model retraining task...")
     try:
-        # Since AIService.retrain_model is synchronous (modified by user), we can call it directly
         AIService.retrain_model()
         logger.info("AI model retraining completed successfully.")
         return {"status": "success", "message": "Model retraining completed"}
@@ -33,66 +38,67 @@ def retrain_model_task(self):
         raise e
 
 
-async def fetch_product_details_async(product_id: int) -> tuple[str, str]:
-
-    # Create a local engine for this specific asyncio loop
-    engine = create_async_engine(settings.DATABASE_URL)
-    AsyncSessionLocal = async_sessionmaker(
-        bind=engine, class_=AsyncSession, expire_on_commit=False
-    )
-
+def fetch_product_details(product_id: int) -> tuple[str, str]:
+    # Sync DB fetch
     try:
-        async with AsyncSessionLocal() as session:
+        with SessionLocal() as session:
             stmt = select(ProductDefinition).where(ProductDefinition.id == product_id)
-            result = await session.execute(stmt)
-            product = result.scalars().first()
+            product = session.execute(stmt).scalars().first()
             if product:
                 return product.name, product.barcode
             return "Unknown", ""
     except Exception as e:
-        logger.error(f"Async DB fetch error: {e}")
+        logger.error(f"DB fetch error: {e}")
         return "Error", ""
-    finally:
-        await engine.dispose()
-
 
 @celery_app.task(bind=True, name="app.tasks.ai_tasks.predict_task")
-def predict_task(self, file_path: str):
+def predict_task(self, s3_key: str):
     """
     Celery task to recognize a product from an image.
+    Receives s3_key, downloads it, predicts, cleans up.
     """
-    logger.info(f"Starting prediction task for file: {file_path}")
+    logger.info(f"Starting prediction task for key: {s3_key}")
+    
 
-    # Pre-check file existence
-    if not os.path.exists(file_path):
-        logger.error(f"File not found at path: {file_path}")
-        raise FileNotFoundError(f"File not found: {file_path}")
-
-    # Check file size
-    file_size = os.path.getsize(file_path)
-    logger.info(f"File size: {file_size} bytes")
-
-    if file_size == 0:
-        logger.error(f"File is empty: {file_path}")
-        raise ValueError(f"File is empty: {file_path}")
+    
+    # Download to temp
+    ext = os.path.splitext(s3_key)[1]
+    if not ext: ext = ".jpg"
+    
+    temp_file = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}{ext}")
+    
+    async def download_file():
+        content = await storage.get(s3_key)
+        async with aiofiles.open(temp_file, "wb") as f:
+            await f.write(content)
+            
+    async def delete_s3_file():
+        await storage.delete(s3_key)
 
     try:
-        product_id, confidence = AIService.predict(file_path)
+        # 1. Download
+        asyncio.run(download_file())
+        
+        if not os.path.exists(temp_file):
+             raise FileNotFoundError(f"Failed to download {s3_key}")
+        
+        # 2. Predict
+        product_id, confidence = AIService.predict(temp_file)
 
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        # 3. Cleanup local
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+            
+        # 4. Cleanup S3? 
+        # API uploaded to 'temp_uploads' or similar. 
+        # For this flow, we should probably delete the source file from S3 too.
+        asyncio.run(delete_s3_file())
 
-        # Fetch product details from DB
+        # Fetch product details from DB (Sync)
         product_name = "Unknown"
         product_barcode = ""
         if product_id != -1:
-            try:
-                product_name, product_barcode = asyncio.run(
-                    fetch_product_details_async(product_id)
-                )
-            except Exception as e:
-                logger.error(f"Failed to run async fetching loop: {e}")
-                product_name = "Error"
+            product_name, product_barcode = fetch_product_details(product_id)
 
         return {
             "product_id": product_id,

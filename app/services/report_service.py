@@ -30,6 +30,7 @@ class ReportService:
         Generates a PDF report for expired/expiring items using ReportLab.
         Returns the filename.
         """
+        # Register fonts or fallback
         if ReportService._register_fonts():
             font_regular = 'DejaVuSans'
             font_bold = 'DejaVuSans-Bold'
@@ -136,6 +137,7 @@ class ReportService:
         2. Product Audit (Inventory with receiver info)
         3. Alerts & Expiry (Unresolved alerts)
         """
+        # Register fonts or fallback
         if ReportService._register_fonts():
             font_regular = 'DejaVuSans'
             font_bold = 'DejaVuSans-Bold'

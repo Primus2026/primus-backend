@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, patch, ANY, AsyncMock
 from datetime import datetime, timedelta
 from httpx import AsyncClient
 
@@ -57,55 +57,48 @@ def test_generate_expiry_pdf_creation(tmp_path):
         header = f.read(4)
         assert header == b"%PDF"
 
-def test_report_storage_validate_path(tmp_path):
+@pytest.mark.asyncio
+async def test_report_storage_validate_filename():
     """
-    Verifies that ReportStorageService correctly validates paths 
+    Verifies that ReportStorageService correctly validates filenames 
     and prevents traversal.
     """
-    # Patch REPORT_DIR
-    mock_report_dir = tmp_path / "reports"
-    mock_report_dir.mkdir()
-    ReportStorageService.REPORT_DIR = mock_report_dir
-    
-    # Ensure dir exists
-    ReportStorageService.ensure_directory()
-    base_dir = ReportStorageService.REPORT_DIR
-    
     # Valid
-    valid_path = ReportStorageService._validate_path("test.pdf")
-    assert valid_path == (base_dir / "test.pdf").resolve()
+    valid_path = ReportStorageService._validate_filename("test.pdf")
+    assert valid_path == "reports/test.pdf"
     
     # Traversal Attempt
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as excinfo:
-        ReportStorageService._validate_path("../secret.txt")
+        ReportStorageService._validate_filename("../secret.txt")
     assert excinfo.value.status_code == 400
     
     # Slash Attempt
     with pytest.raises(HTTPException):
-        ReportStorageService._validate_path("sub/folder.pdf")
+        ReportStorageService._validate_filename("sub/folder.pdf")
 
-def test_report_storage_list_reports(tmp_path):
+@pytest.mark.asyncio
+async def test_report_storage_list_reports():
     """
     Verifies listing reports (Service Layer).
     """
-    # Patch REPORT_DIR
-    mock_report_dir = tmp_path / "reports_list"
-    mock_report_dir.mkdir()
-    ReportStorageService.REPORT_DIR = mock_report_dir
+    # Mock storage.list
+    mock_files = [
+        {"name": "EXPIRY_1.pdf", "size": 1024, "modified": 1672531200.0},
+        {"name": "EXPIRY_2.pdf", "size": 2048, "modified": 1672617600.0},
+        {"name": "OTHER.txt", "size": 128, "modified": 1672617600.0},
+    ]
     
-    # Create dummy files
-    (mock_report_dir / "EXPIRY_1.pdf").touch()
-    (mock_report_dir / "EXPIRY_2.pdf").touch()
-    (mock_report_dir / "OTHER.txt").touch() # Should be ignored
-    
-    reports = ReportStorageService.list_reports()
-    
-    assert len(reports) == 2
-    filenames = [r["filename"] for r in reports]
-    assert "EXPIRY_1.pdf" in filenames
-    assert "EXPIRY_2.pdf" in filenames
-    assert "OTHER.txt" not in filenames
+    with patch("app.services.report_storage.storage.list", new_callable=AsyncMock) as mock_list:
+        mock_list.return_value = mock_files
+        
+        reports = await ReportStorageService.list_reports()
+        
+        assert len(reports) == 2
+        filenames = [r["filename"] for r in reports]
+        assert "EXPIRY_1.pdf" in filenames
+        assert "EXPIRY_2.pdf" in filenames
+        assert "OTHER.txt" not in filenames
 
 
 # ==========================================
@@ -203,7 +196,8 @@ async def test_list_reports_endpoint(authorized_warehouseman_client: AsyncClient
         {"filename": "report2.pdf", "created_at": datetime(2023, 1, 2), "size_bytes": 2048}
     ]
     
-    with patch("app.services.report_storage.ReportStorageService.list_reports", return_value=mock_reports):
+    with patch("app.services.report_storage.ReportStorageService.list_reports", new_callable=AsyncMock) as mock_service_list:
+        mock_service_list.return_value = mock_reports
         response = await authorized_warehouseman_client.get("/api/v1/reports/")
         
         assert response.status_code == 200
@@ -212,21 +206,110 @@ async def test_list_reports_endpoint(authorized_warehouseman_client: AsyncClient
         assert data[0]["filename"] == "report1.pdf"
 
 @pytest.mark.asyncio
-async def test_download_report_endpoint(authorized_warehouseman_client: AsyncClient, tmp_path):
+async def test_download_report_endpoint(authorized_warehouseman_client: AsyncClient):
     """
     Test GET /reports/download/{filename}
-    Creates a dummy file and mocks get_report_path.
+    Mocks get_report_content.
     """
-    # Create a dummy report file to stream
-    dummy_file = tmp_path / "dummy_report.pdf"
-    dummy_file.write_bytes(b"%PDF-1.4 dummy content")
+    dummy_content = b"%PDF-1.4 dummy content"
     
-    with patch("app.services.report_storage.ReportStorageService.get_report_path", return_value=dummy_file):
+    with patch("app.services.report_storage.ReportStorageService.get_report_content", new_callable=AsyncMock) as mock_get_content:
+        mock_get_content.return_value = dummy_content
+        
         response = await authorized_warehouseman_client.get("/api/v1/reports/download/dummy_report.pdf")
         
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
+        assert response.content == dummy_content
 
+def test_generate_audit_pdf_creation(tmp_path):
+    """
+    Verifies that generate_audit_pdf creates a file with a PDF header and handles all sections.
+    """
+    # 1. Setup Mock Data
+    
+    # Mock Racks
+    rack1 = MagicMock(spec=Rack)
+    rack1.designation = "R-01"
+    rack1.rows_m = 5
+    rack1.cols_n = 10
+    # Mock items list for fill calculation
+    rack1.items = [1, 2, 3] # just need length
+    
+    rack2 = MagicMock(spec=Rack)
+    rack2.designation = "R-02"
+    rack2.rows_m = 4
+    rack2.cols_n = 5
+    rack2.items = [] # empty
+    
+    racks = [rack1, rack2]
+    
+    # Mock Items
+    p1 = MagicMock(spec=ProductDefinition)
+    p1.name = "Test Product A"
+    p1.barcode = "123"
+    
+    u1 = MagicMock(spec=User)
+    u1.email = "warehouseman@example.com"
+    
+    item1 = MagicMock(spec=StockItem)
+    item1.product = p1
+    item1.rack = rack1
+    item1.position_row = 1
+    item1.position_col = 1
+    item1.entry_date = datetime.now()
+    item1.receiver = u1
+    
+    items = [item1]
+    
+    # Mock Alerts
+    alert1 = MagicMock(spec=Alert)
+    alert1.created_at = datetime.now()
+    alert1.alert_type = AlertType.TEMP
+    alert1.message = "Temperature too high"
+    alert1.rack = rack1
+    alert1.product = None
+    
+    alert2 = MagicMock(spec=Alert)
+    alert2.created_at = datetime.now() - timedelta(days=1)
+    alert2.alert_type = AlertType.EXPIRY
+    alert2.message = "Product expired"
+    alert2.rack = None
+    alert2.product = p1
+    
+    alerts = [alert1, alert2]
+    
+    # 2. Define Output Path
+    output_dir = tmp_path / "reports"
+    output_dir.mkdir()
+    filename = "AUDIT_TEST.pdf"
+    file_path = output_dir / filename
+    
+    # 3. Call Service
+    generated_name = ReportService.generate_audit_pdf(racks, items, alerts, file_path)
+    
+    # 4. Assertions
+    assert generated_name == filename
+    assert file_path.exists()
+    assert file_path.stat().st_size > 0
+    
+    # Check PDF Header using first bytes
+    with open(file_path, "rb") as f:
+        header = f.read(4)
+        assert header == b"%PDF"
+
+def test_generate_audit_pdf_empty(tmp_path):
+    """
+    Verifies that generate_audit_pdf handles empty lists gracefully.
+    """
+    output_dir = tmp_path / "reports_empty"
+    output_dir.mkdir()
+    file_path = output_dir / "AUDIT_EMPTY.pdf"
+    
+    ReportService.generate_audit_pdf([], [], [], file_path)
+    
+    assert file_path.exists()
+    assert file_path.stat().st_size > 0
 def test_generate_audit_pdf_creation(tmp_path):
     """
     Verifies that generate_audit_pdf creates a file with a PDF header and handles all sections.

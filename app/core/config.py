@@ -29,6 +29,22 @@ class Settings(BaseSettings):
     MODELS_DIR: str = "/data/models"
     DATASET_DIR: str = "/data/datasets/product_classification"
 
+    # Storage Settings
+    STORAGE_TYPE: str = "minio" 
+
+    MINIO_ENDPOINT: str = "minio:9000"
+    MINIO_EXTERNAL_ENDPOINT: str = "http://localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_SECURE: bool = False
+    
+    # Bucket names
+    BUCKET_IMAGES: str = "product-images"
+    BUCKET_REPORTS: str = "reports"
+    BUCKET_DATASETS: str = "datasets"
+    BUCKET_MODELS: str = "models"
+
+
     REPORTS_SCHEDULE_HOUR: int = 7
     REPORTS_SCHEDULE_MINUTE: int = 30
 
