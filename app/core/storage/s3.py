@@ -1,3 +1,4 @@
+import asyncio
 import aiobotocore.session
 from typing import BinaryIO, Union, Optional
 from app.core.config import settings
@@ -28,7 +29,7 @@ class S3StorageProvider(StorageProvider):
         return settings.BUCKET_IMAGES, path
 
 
-    async def save(self, path: str, content: Union[bytes, BinaryIO], content_type: Optional[str] = None) -> str:
+    async def save(self, path: str, content: Union[bytes, BinaryIO, "UploadFile"], content_type: Optional[str] = None) -> str:
         bucket, key = self._get_bucket_from_path(path)
         
         async with self.session.create_client(
@@ -39,10 +40,20 @@ class S3StorageProvider(StorageProvider):
             use_ssl=self.secure
         ) as client:
             if isinstance(content, bytes):
-                await client.put_object(Bucket=bucket, Key=key, Body=content, ContentType=content_type or 'application/octet-stream')
+                body = content
+            elif hasattr(content, "read") and hasattr(content, "seek"):
+                 # Handle UploadFile (async) vs standard file (sync)
+                 # Check if seek/read are awaitable
+                 if hasattr(content, "seek") and callable(content.seek) and asyncio.iscoroutinefunction(content.seek):
+                     await content.seek(0)
+                     body = await content.read()
+                 else:
+                     content.seek(0)
+                     body = content.read()
             else:
-                content.seek(0)
-                await client.put_object(Bucket=bucket, Key=key, Body=content, ContentType=content_type or 'application/octet-stream')
+                 raise ValueError("Unsupported content type for upload")
+            
+            await client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type or 'application/octet-stream')
         return path
 
     async def get(self, path: str) -> bytes:

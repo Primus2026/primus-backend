@@ -72,7 +72,7 @@ class ProductDefinitionService:
         new_filename = f"{uuid.uuid4()}{file_extension}"
         
         # Store as: product_images/UUID.jpg
-        relative_path = f"product_images/{new_filename}" 
+        relative_path = f"product-images/{new_filename}" 
         
         # 2. Save file using storage provider
         try:
@@ -104,7 +104,7 @@ class ProductDefinitionService:
             file_extension = ".jpg" 
         
         new_filename = f"{uuid.uuid4()}{file_extension}"
-        relative_path = f"product_images/{new_filename}"
+        relative_path = f"product-images/{new_filename}"
         
         try:
             # Read local file and upload
