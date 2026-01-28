@@ -179,6 +179,36 @@ async def test_get_grouped_stocks_validation_limits(authorized_admin_client: Asy
     response = await authorized_admin_client.get("/api/v1/stock/?page=0")
     assert response.status_code == 422
     
-    # Limit > 100
     response = await authorized_admin_client.get("/api/v1/stock/?limit=101")
     assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_get_grouped_stocks_empty(authorized_admin_client: AsyncClient, db_session: AsyncSession):
+    """Test response when no products exist"""
+    # Ensure DB is empty of products (might be tricky if other tests run in parallel or share DB, 
+    # but db_session fixture usually provides isolation or we assume empty start if not setup)
+    # Since we don't call setup_stock_data here, it should be empty relative to this test's context
+    response = await authorized_admin_client.get("/api/v1/stock/")
+    assert response.status_code == 200
+    assert response.json() == []
+
+@pytest.mark.asyncio
+async def test_get_grouped_stocks_no_items(
+    authorized_admin_client: AsyncClient, 
+    db_session: AsyncSession
+):
+    """Test product exists but has no stock items"""
+    product = ProductDefinition(
+        name="Ghost Product", barcode="GHOST", expiry_days=30, weight_kg=1,
+        req_temp_min=0, req_temp_max=10, dims_x_mm=10, dims_y_mm=10, dims_z_mm=10
+    )
+    db_session.add(product)
+    await db_session.commit()
+    
+    response = await authorized_admin_client.get("/api/v1/stock/")
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert len(data) == 1
+    assert data[0]["product"]["name"] == "Ghost Product"
+    assert data[0]["stock_items"] == []
