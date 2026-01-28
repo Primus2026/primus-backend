@@ -160,11 +160,11 @@ class StockService:
             
         product_ids = [p.id for p in products]
         
-        # Step 2: Get stock items for these products and load receiver
+        # Step 2: Get stock items for these products and load receiver and rack
         items_stmt = (
             select(StockItem)
             .where(StockItem.product_id.in_(product_ids))
-            .options(selectinload(StockItem.receiver))
+            .options(selectinload(StockItem.receiver), selectinload(StockItem.rack))
             .order_by(StockItem.expiry_date)
         )
         
@@ -192,7 +192,8 @@ class StockService:
                 "position_col": item.position_col,
                 "entry_date": item.entry_date,
                 "expiry_date": item.expiry_date.date() if isinstance(item.expiry_date, datetime) else item.expiry_date,
-                "received_by": {"id": item.receiver.id, "email": item.receiver.email}
+                "received_by": {"id": item.receiver.id, "email": item.receiver.email},
+                "rack": item.rack
             }
             items_by_product[item.product_id].append(item_dict)
             

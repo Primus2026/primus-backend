@@ -1,4 +1,5 @@
 from app.schemas.user import UserReceiverOut
+from app.schemas.rack import RackOut
 from datetime import datetime, date 
 from app.schemas.product_definition import ProductDefinitionOut
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,6 +37,7 @@ class StockItemSimpleOut(BaseModel):
     entry_date: datetime
     expiry_date: date
     received_by: UserReceiverOut
+    rack: RackOut
 
     model_config = ConfigDict(from_attributes=True)
 
