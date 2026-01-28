@@ -12,7 +12,8 @@ celery_app = Celery("app", include=[
     "app.tasks.csv_import",
     "app.tasks.product_definition_tasks",
     "app.tasks.report_tasks",
-    "app.tasks.ai_tasks"
+    "app.tasks.ai_tasks",
+    "app.tasks.product_stats_tasks"
 ])
 celery_app.conf.broker_url = settings.CELERY_BROKER_URL
 celery_app.conf.result_backend = settings.CELERY_RESULT_BACKEND

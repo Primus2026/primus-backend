@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.stock import RackLocation
+from app.schemas.stock import RackLocation, RackLocationManual
 from app.services.stock_service import StockService
 from redis.asyncio import Redis
 from app.core import deps
@@ -71,3 +71,20 @@ async def outbound_stock_item_cancel(
 
     return await StockService.outbound_stock_item_cancel(rack_location, user, redis_client)
 
+@router.post("/manual", response_model=Msg)
+async def outbound_stock_item_manual(
+    rack_location: RackLocationManual,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+    redis_client: Redis = Depends(deps.get_redis),
+):
+    """
+    Manually confirm the outbound process for a stock item
+
+    **rack_location**:
+    Location of the item to be removed
+
+    Returns a message indicating success
+    """
+
+    return await StockService.outbound_stock_item_manual(rack_location, db, redis_client)

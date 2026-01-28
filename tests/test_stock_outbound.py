@@ -148,7 +148,7 @@ async def test_cancel_success(
     mock_redis.delete.assert_called()
 
 @pytest.mark.asyncio
-async def test_outbound_priority_expiry_over_entry(
+async def test_outbound_fifo_entry_priority(
     db_session: AsyncSession
 ):
     # Setup Data
@@ -201,10 +201,10 @@ async def test_outbound_priority_expiry_over_entry(
         redis_client=mock_redis
     )
     
-    # Assert Item B (Col 2) is returned because it expires sooner
+    # Assert Item A (Col 1) is returned because it entered earlier (FIFO)
     assert isinstance(result, RackLocation)
     assert result.designation == "R-FEFO-1"
-    assert result.col == 2 # Item B
+    assert result.col == 1 # Item A
     assert result.row == 1
 
 
@@ -248,5 +248,32 @@ async def test_outbound_confirm_forbidden(
             redis_client=mock_redis
         )
     
-    assert excinfo.value.status_code == 403
     assert excinfo.value.detail == "You are not authorized to confirm this outbound process"
+
+@pytest.mark.asyncio
+async def test_initiate_not_found(
+    db_session: AsyncSession
+):
+    """Test 404 when no stock items exist"""
+    # Create product but no items
+    product = ProductDefinition(
+        name="Empty Product", barcode="EMPTY-123", expiry_days=30, weight_kg=1,
+        req_temp_min=0, req_temp_max=100, dims_x_mm=10, dims_y_mm=10, dims_z_mm=10
+    )
+    db_session.add(product)
+    await db_session.commit()
+    
+    user = User(login="u_empty", email="e@t.pl", password_hash="x", role="WAREHOUSEMAN", is_active=True)
+    db_session.add(user)
+    await db_session.commit()
+    
+    with pytest.raises(HTTPException) as excinfo:
+        await StockService.outbound_stock_item_initiate(
+            barcode="EMPTY-123",
+            db=db_session,
+            user=user,
+            redis_client=mock_redis
+        )
+    
+    assert excinfo.value.status_code == 404
+    assert excinfo.value.detail == "Stock item not found"

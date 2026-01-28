@@ -223,3 +223,8 @@ class RackService:
         await db.commit()
         
         return RackImportResult(message="Import completed successfully", summary=summary)
+
+    @staticmethod 
+    async def get_all_racks(db: AsyncSession) -> list[Rack]:
+        result = await db.execute(select(Rack))
+        return result.scalars().all()

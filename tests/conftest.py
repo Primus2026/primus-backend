@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from typing import AsyncGenerator
@@ -7,6 +8,7 @@ from app.core import security
 
 from app.main import app
 from app.database.session import get_db
+from app.core.deps import get_redis
 from app.database.models.base import Base
 from app.core.config import settings
 
@@ -52,13 +54,31 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
 
     await trans.rollback()
     await connection.close()
+    
+    app.dependency_overrides.clear()
+
 @pytest.fixture
-async def async_client(db_session) -> AsyncGenerator[AsyncClient, None]:
+async def mock_redis():
+    mock = AsyncMock()
+    # Mock methods used in service
+    mock.get = AsyncMock(return_value=None)
+    mock.set = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.exists = AsyncMock(return_value=False)
+    return mock
+
+
+@pytest.fixture
+async def async_client(db_session, mock_redis) -> AsyncGenerator[AsyncClient, None]:
     # Override the get_db dependency to use the test session
     async def override_get_db():
         yield db_session
+        
+    async def override_get_redis():
+        yield mock_redis
     
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_redis] = override_get_redis
     
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
