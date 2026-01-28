@@ -9,6 +9,11 @@ class RackLocation(BaseModel):
     row: int = Field(..., description="Item's position row")
     col: int = Field(..., description="Item's position column")
 
+class RackLocationManual(BaseModel):
+    rack_id: int = Field(..., description="Rack ID")
+    row: int = Field(..., description="Item's position row")
+    col: int = Field(..., description="Item's position column")
+
 from uuid import UUID
 
 class StockOut(BaseModel):

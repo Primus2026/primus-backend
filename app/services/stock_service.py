@@ -1,7 +1,7 @@
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
-from app.schemas.stock import RackLocation, ProductStockGroup
+from app.schemas.stock import RackLocation, RackLocationManual, ProductStockGroup
 from app.database.models.stock_item import StockItem
 from app.database.models.user import User
 from app.schemas.msg import Msg
@@ -200,3 +200,38 @@ class StockService:
             })
             
         return results
+
+    @staticmethod
+    async def outbound_stock_item_manual(rack_location: RackLocationManual, db: AsyncSession):
+        rack = await db.execute(
+            select(Rack)
+            .where(
+                Rack.id == rack_location.rack_id,
+            )
+        )
+        rack = rack.scalars().first()
+        if not rack:
+            raise HTTPException(
+                status_code=404,
+                detail="Rack location not found",
+            )
+        
+        stock_item = await db.execute(
+            select(StockItem)
+            .where(
+                StockItem.rack_id == rack.id,
+                StockItem.position_row == rack_location.row,
+                StockItem.position_col == rack_location.col,
+            )
+        )
+        stock_item = stock_item.scalars().first()
+        if not stock_item:
+            raise HTTPException(
+                status_code=404,
+                detail="Stock item not found",
+            )
+        
+        await db.delete(stock_item)
+        await db.commit()
+        
+        return Msg(message="Stock item removed successfully")        
