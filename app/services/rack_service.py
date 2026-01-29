@@ -228,3 +228,53 @@ class RackService:
     async def get_all_racks(db: AsyncSession) -> list[Rack]:
         result = await db.execute(select(Rack))
         return result.scalars().all()
+
+    @staticmethod
+    async def get_racks_with_inventory(db: AsyncSession):
+        from app.schemas.rack import RackWithInventory, RackSlotWeight
+        
+        # Fetch all racks
+        racks_result = await db.execute(select(Rack))
+        racks = racks_result.scalars().all()
+        
+        # Fetch all active stock items joined with ProductDefinition to get weight
+        stmt = select(
+            StockItem.rack_id,
+            StockItem.position_row,
+            StockItem.position_col,
+            ProductDefinition.weight_kg
+        ).join(ProductDefinition, StockItem.product_id == ProductDefinition.id)
+        
+        items_result = await db.execute(stmt)
+        items = items_result.all()
+        
+        # Map items to rack_id
+        items_by_rack = {}
+        for rack_id, row, col, weight in items:
+            if rack_id not in items_by_rack:
+                items_by_rack[rack_id] = []
+            items_by_rack[rack_id].append(RackSlotWeight(row=row, col=col, current_weight=weight))
+            
+        # Construct result
+        results = []
+        for rack in racks:
+            # We explicitly map fields to ensure RackWithInventory is correctly populated
+            # since the source 'rack' is a SQLAlchemy model and target has extra field 'active_slots'
+            rack_data = RackWithInventory(
+                id=rack.id,
+                designation=rack.designation,
+                rows_m=rack.rows_m,
+                cols_n=rack.cols_n,
+                temp_min=rack.temp_min,
+                temp_max=rack.temp_max,
+                max_weight_kg=rack.max_weight_kg,
+                max_dims_x_mm=rack.max_dims_x_mm,
+                max_dims_y_mm=rack.max_dims_y_mm,
+                max_dims_z_mm=rack.max_dims_z_mm,
+                comment=rack.comment,
+                distance_from_exit_m=rack.distance_from_exit_m,
+                active_slots=items_by_rack.get(rack.id, [])
+            )
+            results.append(rack_data)
+            
+        return results

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.database.models.user import User
 from app.core import deps
-from app.schemas.rack import RackCreate, RackUpdate, RackOut, RackImportResult
+from app.schemas.rack import RackCreate, RackUpdate, RackOut, RackImportResult, RackWithInventory
 from app.services.rack_service import RackService
 from app.core.celery_worker import celery_app
 from app.tasks.csv_import import import_racks as import_racks_task
@@ -89,6 +89,18 @@ async def get_import_result(
             result_data["task_id"] = celery_task_id
         return RackImportResult(**result_data)
     
+
+
+@router.get("/inventory-state", response_model=list[RackWithInventory])
+async def get_racks_inventory_state(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Get all racks with current inventory state (active slots and weights).
+    Used by MQTT Listener to initialize cache to prevent cold start false alerts.
+    """
+    return await RackService.get_racks_with_inventory(db)
 
 
 @router.put("/{rack_id}", response_model=RackOut, responses={

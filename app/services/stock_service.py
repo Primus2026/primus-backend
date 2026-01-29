@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.database.models.rack import Rack
 from app.database.models.rack import Rack
 import logging
+import json
 from app.services.product_stats_service import ProductStatsService
 
 logger = logging.getLogger("STOCK_SERVICE")
@@ -43,10 +44,17 @@ class StockService:
 
         # Set the expected change flag with format key ${rack_id}:${row}:${col} value ${user_id}
         key = f"ExpectedChange:{itemToRemove.rack.designation}:{itemToRemove.position_row}:{itemToRemove.position_col}"
+        
+        lock_value = json.dumps({
+            "user_id": user.id,
+            "type": "OUTBOUND",
+            "expected_weight": 0.0
+        })
+
         logger.info(
-            f"Initiating outbound. User ID: {user.id} ({type(user.id)}). Key: {key}, Value: {user.id}"
+            f"Initiating outbound. User ID: {user.id} ({type(user.id)}). Key: {key}, Value: {lock_value}"
         )
-        await redis_client.set(key, user.id, ex=settings.EXPECTED_CHANGE_TTL)
+        await redis_client.set(key, lock_value, ex=settings.EXPECTED_CHANGE_TTL)
 
         return RackLocation(
             designation=itemToRemove.rack.designation,
@@ -70,12 +78,19 @@ class StockService:
             )
 
         # The cached value is the issuers user_id
+        try:
+            change_data = json.loads(expectedChange)
+            cached_user_id = change_data.get("user_id")
+        except (json.JSONDecodeError, TypeError):
+             # Fallback for legacy keys
+            cached_user_id = expectedChange.decode("utf-8") if isinstance(expectedChange, bytes) else expectedChange
+
         logger.info(
-            f"Confirming outbound. User ID: {user.id} ({type(user.id)}). Stored ID: {expectedChange} ({type(expectedChange)})"
+            f"Confirming outbound. User ID: {user.id} ({type(user.id)}). Stored ID: {cached_user_id} ({type(cached_user_id)})"
         )
-        if str(expectedChange) != str(user.id):
+        if str(cached_user_id) != str(user.id):
             logger.error(
-                f"Authorization failed. Stored: {expectedChange}, Current: {user.id}"
+                f"Authorization failed. Stored: {cached_user_id}, Current: {user.id}"
             )
             raise HTTPException(
                 status_code=403,
@@ -127,7 +142,13 @@ class StockService:
             )
 
         # the cached value is the issuers user_id
-        if str(expectedChange) != str(user.id):
+        try:
+            change_data = json.loads(expectedChange)
+            cached_user_id = change_data.get("user_id")
+        except (json.JSONDecodeError, TypeError):
+            cached_user_id = expectedChange.decode("utf-8") if isinstance(expectedChange, bytes) else expectedChange
+
+        if str(cached_user_id) != str(user.id):
             raise HTTPException(
                 status_code=403,
                 detail="You are not authorized to cancel this outbound process",

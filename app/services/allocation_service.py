@@ -163,7 +163,9 @@ class AllocationService:
                 # Store user_id and product_id in Redis
                 lock_value = json.dumps({
                     "user_id": user.id,
-                    "product_id": product.id
+                    "product_id": product.id,
+                    "type": "INBOUND",
+                    "expected_weight": product.weight_kg
                 })
                 
                 await redis_client.set(lock_key, lock_value, ex=settings.EXPECTED_CHANGE_TTL)
@@ -200,9 +202,7 @@ class AllocationService:
 
         if cached_user_id != user.id:
             raise HTTPException(status_code=400, detail="This rack location is not locked for this user")
-        
-        # Remove lock
-        await redis_client.delete(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
+    
         
         # update weight on rack in cache
         stmt_rack = select(Rack).where(Rack.designation == rack_location.designation)
@@ -233,6 +233,12 @@ class AllocationService:
         stock_item.receiver = user
         
         await redis_client.hincrby(f"Rack:{rack_location.designation}", "weight_kg", int(product_weight))
+        
+        # Set the slot weight for MQTT listener
+        await redis_client.set(f"Weight:{rack_location.designation}:{rack_location.row}:{rack_location.col}", product_weight)
+        
+        # Remove lock
+        await redis_client.delete(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
         
         logger.info(f"Confirmed allocation for {rack_location.designation} [{rack_location.row}, {rack_location.col}] for user {user.id}")
         
