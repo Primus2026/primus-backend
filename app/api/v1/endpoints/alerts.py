@@ -1,3 +1,5 @@
+from app.services.alert_service import AlertService
+from datetime import timedelta, datetime 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
@@ -5,6 +7,7 @@ from app.database.models.alert import Alert, AlertType
 from app.schemas.alert import AlertCreate, AlertOut
 from app.core import deps
 from app.database.models.user import User
+from fastapi import Body
 
 router = APIRouter()
 
@@ -19,35 +22,46 @@ async def create_alert(
     # Or we can reuse get_current_user if the listener logs in.
     # Given the description, we'll keep it simple:
 ):
-    """
-    Create a new alert (e.g. from MQTT Listener).
-    """
-    # Check for existing unresolved alert
-    from sqlalchemy import select
-    
-    stmt = select(Alert).where(
-        Alert.rack_id == alert_in.rack_id,
-        Alert.position_row == alert_in.position_row,
-        Alert.position_col == alert_in.position_col,
-        Alert.alert_type == alert_in.alert_type,
-        Alert.is_resolved == False
-    )
-    result = await db.execute(stmt)
-    existing_alert = result.scalars().first()
-    
-    if existing_alert:
-        return existing_alert
+    return await AlertService.create_alert(alert_in, db)
 
-    alert = Alert(
-        alert_type=alert_in.alert_type,
-        rack_id=alert_in.rack_id,
-        product_id=alert_in.product_id,
-        message=alert_in.message,
-        last_valid_weight=alert_in.last_valid_weight,
-        position_row=alert_in.position_row,
-        position_col=alert_in.position_col
-    )
-    db.add(alert)
-    await db.commit()
-    await db.refresh(alert)
-    return alert
+@router.post("/{alert_id}/resolve", response_model=AlertOut, status_code=200)
+async def resolve_alert(
+    alert_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+):
+    """
+    Resolve an alert.
+    """
+    return await AlertService.resolve_alert(alert_id, db, user)
+
+@router.get("/", response_model=list[AlertOut], status_code=200)
+async def get_alerts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+):
+    """
+    Get all alerts.
+    """
+    return await AlertService.get_alerts(db)
+
+@router.get("/unsent", response_model=list[AlertOut], status_code=200)
+async def get_unsent_alerts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+):
+    """
+    Get all unsent alerts.
+    """
+    return await AlertService.get_unsent_alerts(db)
+
+@router.post("/mark-as-read", response_model=list[AlertOut], status_code=200)
+async def mark_alerts_as_read(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+    alert_ids: list[int] = Body(...),
+    ):
+    """
+    Mark alerts as read.
+    """
+    return await AlertService.mark_alerts_as_read(alert_ids, db, user)
