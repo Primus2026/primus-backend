@@ -61,7 +61,7 @@ async def test_update_rack_constraints(
         assert response.status_code == 400
         assert expect_msg in response.json()['detail']
 
-    expected_error = "products already placed on the racks will not fulfill the requirement after changing this"
+    expected_error = "These update values are not valid for the stock items on this rack"
 
     # --- Test Cases ---
 

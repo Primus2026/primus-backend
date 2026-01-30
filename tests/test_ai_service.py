@@ -2,6 +2,12 @@
 
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
+import sys
+
+# Mock ultralytics before importing module that depends on it
+sys.modules["ultralytics"] = MagicMock()
+sys.modules["torch"] = MagicMock()
+
 from app.services.ai_service import AIService
 from app.core.config import settings
 import os

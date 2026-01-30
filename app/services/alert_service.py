@@ -32,7 +32,7 @@ class AlertService:
             Alert.position_col == alert_in.position_col,
             Alert.alert_type == alert_in.alert_type,
             Alert.is_resolved == False,
-            Alert.created_at >= datetime.now() - timedelta(minutes=20)
+            Alert.created_at >= datetime.now() - timedelta(minutes=15)
         )
         result = await db.execute(stmt)
         existing_alert = result.scalars().first()
@@ -47,7 +47,8 @@ class AlertService:
             message=alert_in.message,
             last_valid_weight=alert_in.last_valid_weight,
             position_row=alert_in.position_row,
-            position_col=alert_in.position_col
+            position_col=alert_in.position_col,
+            created_at=datetime.now()
         )
         db.add(alert)
         await db.commit()
