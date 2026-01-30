@@ -93,6 +93,23 @@ async def verify_2fa_setup(
 
 
 @router.post(
+    "/2fa/disable",
+    response_model=Msg,
+    summary="Disable 2FA",
+    responses={401: {"description": "Not authenticated"}},
+)
+async def disable_2fa(
+    current_user: User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """
+    Disable 2FA for the current user.
+    """
+    await AuthService.disable_2fa(db, current_user)
+    return {"message": "2FA disabled successfully"}
+
+
+@router.post(
     "/2fa/login",
     response_model=Token,
     summary="Complete 2FA Login",

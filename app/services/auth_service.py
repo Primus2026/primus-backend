@@ -90,6 +90,14 @@ class AuthService:
         await db.commit()
         return True
 
+    @staticmethod
+    async def disable_2fa(db: AsyncSession, user: User) -> None:
+        user.is_2fa_enabled = False
+        user.totp_secret = None
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
     # --------------------------- 2FA login process ---------------------------
 
     @staticmethod
