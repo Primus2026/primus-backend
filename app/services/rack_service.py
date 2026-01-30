@@ -41,6 +41,68 @@ class RackService:
         if 'id' in update_data:
             del update_data['id']
 
+        # --- VALIDATION AGAINST EXISTING ITEMS ---
+        # Fetch aggregated stats of items currently on this rack
+        stats_query = select(
+            func.sum(ProductDefinition.weight_kg),
+            func.max(ProductDefinition.dims_x_mm),
+            func.max(ProductDefinition.dims_y_mm),
+            func.max(ProductDefinition.dims_z_mm),
+            func.max(ProductDefinition.req_temp_min),
+            func.min(ProductDefinition.req_temp_max)
+        ).join(StockItem, StockItem.product_id == ProductDefinition.id)\
+         .where(StockItem.rack_id == rack_id)
+        
+        stats_result = await db.execute(stats_query)
+        curr_stats = stats_result.one()
+        curr_weight_sum, curr_max_x, curr_max_y, curr_max_z, max_req_min, min_req_max = curr_stats
+
+        # Determine new values (merging update with existing)
+        new_max_weight = update_data.get('max_weight_kg', updatedRack.max_weight_kg)
+        new_max_x = update_data.get('max_dims_x_mm', updatedRack.max_dims_x_mm)
+        new_max_y = update_data.get('max_dims_y_mm', updatedRack.max_dims_y_mm)
+        new_max_z = update_data.get('max_dims_z_mm', updatedRack.max_dims_z_mm)
+        new_temp_min = update_data.get('temp_min', updatedRack.temp_min)
+        new_temp_max = update_data.get('temp_max', updatedRack.temp_max)
+
+        validation_errors = []
+
+        if curr_weight_sum is not None:
+            if new_max_weight < curr_weight_sum:
+                validation_errors.append(f"New max weight ({new_max_weight}kg) is less than current load ({curr_weight_sum}kg)")
+            
+            if new_max_x < curr_max_x:
+                validation_errors.append(f"New width ({new_max_x}mm) is less than widest item ({curr_max_x}mm)")
+            
+            if new_max_y < curr_max_y:
+                validation_errors.append(f"New height ({new_max_y}mm) is less than tallest item ({curr_max_y}mm)")
+            
+            if new_max_z < curr_max_z:
+                validation_errors.append(f"New depth ({new_max_z}mm) is less than deepest item ({curr_max_z}mm)")
+
+            # Temp Check Logic:
+            # Rack must guarantee a temp range that is SAFE for the item.
+            # Item needs [Tmin_req, Tmax_req]. Rack provides [Tmin_rack, Tmax_rack].
+            # Safe means Rack's whole range must be within Item's supported range? 
+            # OR likely: The Rack *maintainable* range must satisfy the Item.
+            # Usually: 
+            #  - The rack's MIN temp must be >= Item's MIN required (it shouldn't get colder than item allows)
+            #  - The rack's MAX temp must be <= Item's MAX required (it shouldn't get hotter than item allows)
+            
+            if max_req_min is not None:
+                # If rack's min temp is LOWER than the highest required min temp, some item might freeze/be too cold?
+                # Actually earlier logic: Rack.temp_min >= max_req_min
+                if new_temp_min < max_req_min:
+                    validation_errors.append(f"New temp min ({new_temp_min}) is lower than required min ({max_req_min})")
+
+            if min_req_max is not None:
+                # If rack's max temp is HIGHER than the lowest required max temp, some item might overheat
+                if new_temp_max > min_req_max:
+                     validation_errors.append(f"New temp max ({new_temp_max}) is higher than required max ({min_req_max})")
+
+        if validation_errors:
+            raise HTTPException(status_code=400, detail="These update values are not valid for the stock items on this rack")
+
         for key, value in update_data.items():
             setattr(updatedRack, key, value)
 
@@ -228,3 +290,53 @@ class RackService:
     async def get_all_racks(db: AsyncSession) -> list[Rack]:
         result = await db.execute(select(Rack))
         return result.scalars().all()
+
+    @staticmethod
+    async def get_racks_with_inventory(db: AsyncSession):
+        from app.schemas.rack import RackWithInventory, RackSlotWeight
+        
+        # Fetch all racks
+        racks_result = await db.execute(select(Rack))
+        racks = racks_result.scalars().all()
+        
+        # Fetch all active stock items joined with ProductDefinition to get weight
+        stmt = select(
+            StockItem.rack_id,
+            StockItem.position_row,
+            StockItem.position_col,
+            ProductDefinition.weight_kg
+        ).join(ProductDefinition, StockItem.product_id == ProductDefinition.id)
+        
+        items_result = await db.execute(stmt)
+        items = items_result.all()
+        
+        # Map items to rack_id
+        items_by_rack = {}
+        for rack_id, row, col, weight in items:
+            if rack_id not in items_by_rack:
+                items_by_rack[rack_id] = []
+            items_by_rack[rack_id].append(RackSlotWeight(row=row, col=col, current_weight=weight))
+            
+        # Construct result
+        results = []
+        for rack in racks:
+            # We explicitly map fields to ensure RackWithInventory is correctly populated
+            # since the source 'rack' is a SQLAlchemy model and target has extra field 'active_slots'
+            rack_data = RackWithInventory(
+                id=rack.id,
+                designation=rack.designation,
+                rows_m=rack.rows_m,
+                cols_n=rack.cols_n,
+                temp_min=rack.temp_min,
+                temp_max=rack.temp_max,
+                max_weight_kg=rack.max_weight_kg,
+                max_dims_x_mm=rack.max_dims_x_mm,
+                max_dims_y_mm=rack.max_dims_y_mm,
+                max_dims_z_mm=rack.max_dims_z_mm,
+                comment=rack.comment,
+                distance_from_exit_m=rack.distance_from_exit_m,
+                active_slots=items_by_rack.get(rack.id, [])
+            )
+            results.append(rack_data)
+            
+        return results

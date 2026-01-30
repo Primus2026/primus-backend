@@ -84,6 +84,15 @@ class RackOut(BaseModel):
     distance_from_exit_m: Optional[float] = None
 
 
+class RackSlotWeight(BaseModel):
+    row: int
+    col: int
+    current_weight: float
+
+class RackWithInventory(RackOut):
+    active_slots: List[RackSlotWeight] = []
+
+
 # CSV Import Schemas
 class RackCSVRow(BaseModel):
     designation: str = Field(..., alias="Oznaczenie")
