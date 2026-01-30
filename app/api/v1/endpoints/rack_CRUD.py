@@ -132,12 +132,12 @@ async def delete_rack(
 async def get_rack(
     rack_id: int = Path(...),
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    current_user: User = Depends(deps.get_current_user),
 ): 
     """
     Get rack details by ID.
     
-    Can only be executed by an admin user.
+    Can be executed by any authenticated user.
     """
     return await RackService.get_rack(db, rack_id)
 
@@ -145,11 +145,11 @@ async def get_rack(
 @router.get("/", response_model=list[RackOut])
 async def get_all_racks(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    current_user: User = Depends(deps.get_current_user),
 ): 
     """
     Get all racks.
     
-    Can only be executed by an admin user.
+    Can be executed by any authenticated user.
     """
     return await RackService.get_all_racks(db)
