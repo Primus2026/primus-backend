@@ -43,7 +43,7 @@ class AllocationService:
             raise HTTPException(status_code=400, detail="No racks defined in the warehouse")
 
         # 3. Filter Racks (Physical Requirements)
-        candidate_racks = []
+        pre_candidate_racks = []
         for rack in racks:
             # Temperature check (Product range must be within Rack range)
             if not (rack.temp_min >= product.req_temp_min and rack.temp_max <= product.req_temp_max):
@@ -55,27 +55,38 @@ class AllocationService:
                     product.dims_z_mm <= rack.max_dims_z_mm):
                 continue
             
-            # Weight check (Rack can hold product)
-            # We need to check current weight of the rack.
-            # Assuming we can calculate it or it's cached. 
-            # For this implementation, we will query items count and assume average weight or sum it.
-            # Let's simple check max weight per shelf against product weight for now, 
-            # as calculating total weight of rack requires summing all items.
-            # Ideally: available_weight = rack.max_weight - sum(item.product.weight)
-            # Let's perform a check if product weight < max_weight_kg (shelf limit)
+            # Single item weight check (Optimization: if item itself is heavier than rack limit)
             if product.weight_kg > rack.max_weight_kg:
                 continue
 
-            # Need to check for available slots
-            # Count items in this rack
-            # This is expensive inside a loop. We should batch this or trust the final slot finder.
-            # However, the algorithm flowchart implies filtering before sorting.
+            # Need to check for available slots? 
             # We will defer "is full" check to the slot finding step or optimize.
-            # Let's keep rack as candidate.
-            candidate_racks.append(rack)
+            pre_candidate_racks.append(rack)
 
-        if not candidate_racks:
+        if not pre_candidate_racks:
             raise HTTPException(status_code=400, detail="No suitable racks found meeting physical requirements")
+            
+        # Bulk fetch current weights for pre-candidates
+        candidate_ids = [r.id for r in pre_candidate_racks]
+        
+        weight_stmt = (
+            select(StockItem.rack_id, func.sum(ProductDefinition.weight_kg))
+            .join(ProductDefinition, StockItem.product_id == ProductDefinition.id)
+            .where(StockItem.rack_id.in_(candidate_ids))
+            .group_by(StockItem.rack_id)
+        )
+        weight_result = await db.execute(weight_stmt)
+        # Map rack_id -> current_weight
+        current_weights = {row[0]: row[1] or 0.0 for row in weight_result.all()}
+        
+        candidate_racks = []
+        for rack in pre_candidate_racks:
+            current_load = current_weights.get(rack.id, 0.0)
+            if current_load + product.weight_kg <= rack.max_weight_kg:
+                candidate_racks.append(rack)
+                
+        if not candidate_racks:
+             raise HTTPException(status_code=400, detail="No suitable racks found (weight limit reached)")
 
         # 4. Strategy Selection based on Frequency Class
         sorted_racks = []
