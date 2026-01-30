@@ -24,6 +24,7 @@ class S3StorageProvider(StorageProvider):
             if prefix == "datasets": return settings.BUCKET_DATASETS, parts[1]
             if prefix == "models": return settings.BUCKET_MODELS, parts[1]
             if prefix == "product_images": return settings.BUCKET_IMAGES, parts[1]
+            if prefix == "backups": return settings.BUCKET_BACKUPS, parts[1]
         
         # Default fallback
         return settings.BUCKET_IMAGES, path

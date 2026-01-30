@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     BUCKET_REPORTS: str = "reports"
     BUCKET_DATASETS: str = "datasets"
     BUCKET_MODELS: str = "models"
+    BUCKET_BACKUPS: str = "backups"
 
 
     REPORTS_SCHEDULE_HOUR: int = 7
@@ -50,6 +51,9 @@ class Settings(BaseSettings):
 
     AI_RETRAIN_SCHEDULE_HOUR: int = 2
     AI_RETRAIN_SCHEDULE_MINUTE: int = 0
+    
+    BACKUP_SCHEDULE_HOUR: int = 3
+    BACKUP_SCHEDULE_MINUTE: int = 0
 
     EXPECTED_CHANGE_TTL: int = 300  # 5 minutes in seconds, controls how long the expected change flag is stored in redis
 
