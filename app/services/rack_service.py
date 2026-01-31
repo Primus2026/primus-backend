@@ -340,3 +340,40 @@ class RackService:
             results.append(rack_data)
             
         return results
+
+    @staticmethod
+    async def get_rack_stock_items(db: AsyncSession, rack_id: int):
+        from app.database.models.stock_item import StockItem
+        from sqlalchemy.orm import selectinload
+
+        # Check if rack exists
+        await RackService.get_rack(db, rack_id)
+
+        stmt = (
+            select(StockItem)
+            .where(StockItem.rack_id == rack_id)
+            .options(
+                selectinload(StockItem.product),
+                selectinload(StockItem.receiver)
+            )
+        )
+        result = await db.execute(stmt)
+        items = result.scalars().all()
+        
+        results = []
+        for item in items:
+            # Manually map the relationship to the schema field name
+            # StockOut expects "received_by"
+            item_data = {
+                "id": item.id,
+                "product": item.product,
+                "rack_id": item.rack_id,
+                "position_row": item.position_row,
+                "position_col": item.position_col,
+                "entry_date": item.entry_date,
+                "expiry_date": item.expiry_date.date() if hasattr(item.expiry_date, 'date') else item.expiry_date,
+                "received_by": item.receiver
+            }
+            results.append(item_data)
+            
+        return results
