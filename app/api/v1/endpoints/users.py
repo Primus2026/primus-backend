@@ -133,3 +133,27 @@ async def get_all_warehouse_workers(
     """
     """
     return await UserService.get_not_active_users(db)
+
+
+@router.delete(
+    "/{user_id}",
+    summary="Delete a user",
+    response_model=Msg,
+    responses={
+        403: {"description": "Cannot delete an administrator"},
+        404: {"description": "User not found"},
+        500: {"description": "Internal Server Error"},
+    },
+)
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(deps.get_db),
+    current_admin: User = Depends(deps.get_current_admin),
+):
+    """
+    Delete a user account.
+
+    Removes a user from the system. Cannot be used to delete administrators.
+    Only accessible by administrators.
+    """
+    return await UserService.delete_user(db=db, user_id=user_id)
