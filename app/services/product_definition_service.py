@@ -50,7 +50,8 @@ class ProductDefinitionService:
             **product_definition.dict()
         )
         db.add(new_product_definition)
-        db.refresh(new_product_definition)
+        await db.commit()
+        await db.refresh(new_product_definition)
         return new_product_definition
 
     @staticmethod
@@ -215,9 +216,14 @@ class ProductDefinitionService:
         import io 
 
         try:
-            content = file_content.decode("utf-8")
+            # Use utf-8-sig to handle BOM if present
+            content = file_content.decode("utf-8-sig")
         except UnicodeDecodeError:
-            return ProductImportResult(status="error", error="Invalid file encoding, must be UTF-8")
+            # Fallback to utf-8 if sig fails (though utf-8-sig handles no BOM too)
+            try:
+                content = file_content.decode("utf-8")
+            except UnicodeDecodeError:
+                return ProductImportResult(status="error", error="Invalid file encoding, must be UTF-8")
         
         rows: list[ProductDefinitionCSVRow] = []
         try:
@@ -225,14 +231,31 @@ class ProductDefinitionService:
             lines = [line.strip() for line in content.splitlines() if line.strip()]
             
             clean_lines = []
-            for line in lines:
-                # If line is header (starts with #Nazwa), strip #
-                # If line is comment (starts with # but not header), skip
-                if line.startswith("#Nazwa"):
-                    clean_lines.append(line.lstrip("#"))
-                elif not line.startswith("#"):
-                    clean_lines.append(line)
+            header_found = False
             
+            for line in lines:
+                # 1. Skip comments that are NOT part of the header block
+                if line.startswith("#") and "Nazwa" not in line:
+                    continue
+                
+                # 2. Identify Header Line
+                # We look for "Nazwa" because it's the first required column alias
+                if not header_found:
+                    if "Nazwa" in line:
+                        # Found header!
+                        header_found = True
+                        clean_lines.append(line.lstrip("#")) # Remove comment char if present in header
+                    else:
+                        # Skip garbage lines before header
+                        continue
+                else:
+                    # 3. Process Data Lines
+                    if not line.startswith("#"):
+                        clean_lines.append(line)
+            
+            if not clean_lines:
+                 return ProductImportResult(status="error", error="Could not find valid CSV header row (must contain 'Nazwa')")
+
             reader = csv.DictReader(clean_lines, delimiter=";")
             
             for i, row_dict in enumerate(reader):
