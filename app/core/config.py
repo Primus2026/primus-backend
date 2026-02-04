@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     BUCKET_BACKUPS: str = "backups"
 
 
-    REPORTS_SCHEDULE_HOUR: int = 7
-    REPORTS_SCHEDULE_MINUTE: int = 30
+    REPORTS_SCHEDULE_HOUR: int = 12
+    REPORTS_SCHEDULE_MINUTE: int = 54
 
     AI_RETRAIN_SCHEDULE_HOUR: int = 2
     AI_RETRAIN_SCHEDULE_MINUTE: int = 0

@@ -37,13 +37,15 @@ async def resolve_alert(
 
 @router.get("/", response_model=list[AlertOut], status_code=200)
 async def get_alerts(
+    is_resolved: bool | None = None,
+    is_sent: bool | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get all alerts.
+    Get all alerts with optional filtering.
     """
-    return await AlertService.get_alerts(db)
+    return await AlertService.get_alerts(db, is_resolved, is_sent)
 
 @router.get("/unsent", response_model=list[AlertOut], status_code=200)
 async def get_unsent_alerts(

@@ -45,29 +45,37 @@ class AllocationService:
         # 3. Filter Racks (Physical Requirements)
         pre_candidate_racks = []
         for rack in racks:
-            # Temperature check (Product range must be within Rack range)
-            if not (rack.temp_min >= product.req_temp_min and rack.temp_max <= product.req_temp_max):
+            SAFE_BUFFER = 2.0 
+
+            overlap_min = max(rack.temp_min, product.req_temp_min)
+            overlap_max = min(rack.temp_max, product.req_temp_max)
+
+            if (overlap_max - overlap_min) < SAFE_BUFFER:
+                logger.info(f"Rack {rack.designation} temperature overlap too small or non-existent")
                 continue
                 
             # Dimensions check (Product fits in slot)
             if not (product.dims_x_mm <= rack.max_dims_x_mm and 
                     product.dims_y_mm <= rack.max_dims_y_mm and
                     product.dims_z_mm <= rack.max_dims_z_mm):
+                logger.info(f"Dimensions check failed for rack {rack.designation}")
                 continue
             
             # Single item weight check (Optimization: if item itself is heavier than rack limit)
             if product.weight_kg > rack.max_weight_kg:
+                logger.info(f"Weight check failed for rack {rack.designation}")
                 continue
 
             # Need to check for available slots? 
             # We will defer "is full" check to the slot finding step or optimize.
             pre_candidate_racks.append(rack)
-
+        print([r.designation for r in pre_candidate_racks])
         if not pre_candidate_racks:
             raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych")
             
         # Bulk fetch current weights for pre-candidates
         candidate_ids = [r.id for r in pre_candidate_racks]
+        logger.info(f"Pre-candidate racks: {candidate_ids}")
         
         weight_stmt = (
             select(StockItem.rack_id, func.sum(ProductDefinition.weight_kg))
@@ -78,14 +86,19 @@ class AllocationService:
         weight_result = await db.execute(weight_stmt)
         # Map rack_id -> current_weight
         current_weights = {row[0]: row[1] or 0.0 for row in weight_result.all()}
+        logger.info(f"Current weights checks: {current_weights}")
         
         candidate_racks = []
         for rack in pre_candidate_racks:
             current_load = current_weights.get(rack.id, 0.0)
+            logger.info(f"Rack {rack.designation} (ID: {rack.id}): Load {current_load} + Item {product.weight_kg} <= Max {rack.max_weight_kg}")
             if current_load + product.weight_kg <= rack.max_weight_kg:
                 candidate_racks.append(rack)
+            else:
+                logger.warning(f"Rack {rack.designation} rejected by weight limit")
                 
         if not candidate_racks:
+             logger.error("No candidate racks found after weight check")
              raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych (limit wagowy został osiągnięty)")
 
         # 4. Strategy Selection based on Frequency Class

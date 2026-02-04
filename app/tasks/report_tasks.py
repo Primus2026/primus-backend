@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List
 from pathlib import Path
 
@@ -8,7 +8,9 @@ from app.database.session import SessionLocal
 from app.database.models.stock_item import StockItem
 from app.database.models.product_definition import ProductDefinition
 from app.database.models.rack import Rack
-from app.database.models.alert import Alert
+from app.database.models.alert import Alert, AlertType
+from app.services.alert_service import AlertService
+from app.schemas.alert import AlertCreate
 from app.services.report_service import ReportService
 from app.services.report_storage import ReportStorageService
 from app.core.celery_worker import celery_app
@@ -16,7 +18,7 @@ from app.core.celery_worker import celery_app
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, undefer
 from app.core.config import settings
 import os
 import tempfile
@@ -34,10 +36,19 @@ async def _process_expiry_report_async(task_id: str, rack_id: int | None = None,
     try:
         async with SessionLocal() as db:
             # 1. Query Data: Items expiring within 24h or already expired
-            now = datetime.now()
+            now = datetime.now().astimezone()
             threshold = now + timedelta(hours=24)
             
-            stmt = select(StockItem).join(ProductDefinition).filter(
+            stmt = select(
+                StockItem.expiry_date,
+                StockItem.rack_id,
+                StockItem.product_id,
+                StockItem.position_row,
+                StockItem.position_col,
+                ProductDefinition.name.label("product_name"),
+                ProductDefinition.barcode.label("product_barcode"),
+                Rack.designation.label("rack_designation")
+            ).join(ProductDefinition).join(Rack).filter(
                 StockItem.expiry_date <= threshold
             )
             
@@ -47,14 +58,59 @@ async def _process_expiry_report_async(task_id: str, rack_id: int | None = None,
             if barcode:
                 stmt = stmt.where(ProductDefinition.barcode == barcode)
             
-            stmt = stmt.options(
-                selectinload(StockItem.product),
-                selectinload(StockItem.rack)
-            )
             result = await db.execute(stmt)
-            items = result.scalars().all()
+            rows = result.all()
+            print(f"DEBUG: Found {len(rows)} items")
 
-            # 2. Determine Filename
+            # 2. Generate Alerts and Prepare PDF Items
+            pdf_items = []
+            
+            # Simple wrapper to mimic ORM structure for PDF generator
+            class PdfItem:
+                def __init__(self, row):
+                    self.expiry_date = row.expiry_date
+                    self.position_row = row.position_row
+                    self.position_col = row.position_col
+                    self.product = type('Product', (), {
+                        'name': row.product_name, 
+                        'barcode': row.product_barcode
+                    })()
+                    self.rack = type('Rack', (), {
+                        'designation': row.rack_designation
+                    })()
+
+            for row in rows:
+                print(f"DEBUG: Processing row for alert: {row.product_barcode}")
+                
+                # Add to PDF items
+                pdf_items.append(PdfItem(row))
+
+                # Determine Alert Type
+                exp_date = row.expiry_date
+                if isinstance(exp_date, date) and not isinstance(exp_date, datetime):
+                     exp_date = datetime.combine(exp_date, datetime.min.time()).astimezone()
+                
+                # Check if expired
+                if exp_date < now:
+                    alert_type = AlertType.EXPIRY
+                    msg = f"Produkt {row.product_name} ({row.product_barcode}) przeterminowany! Wygasł: {row.expiry_date}"
+                else:
+                    alert_type = AlertType.EXPIRY_WARNING
+                    msg = f"Produkt {row.product_name} ({row.product_barcode}) wygasa wkrótce: {row.expiry_date}"
+
+                alert_in = AlertCreate(
+                    alert_type=alert_type,
+                    rack_id=row.rack_id,
+                    product_id=row.product_id,
+                    message=msg,
+                    position_row=row.position_row,
+                    position_col=row.position_col
+                )
+                
+                # Create Alert (Service handles duplication check)
+                await AlertService.create_alert(alert_in, db)
+
+            # 3. Determine Filename
             timestamp = now.strftime("%Y%m%d")
             filename = f"EXPIRY_{timestamp}_{task_id}.pdf"
             
@@ -66,7 +122,7 @@ async def _process_expiry_report_async(task_id: str, rack_id: int | None = None,
                 # Report generation is CPU-bound (ReportLab), so we can run it in a thread or just synchronously 
                 # since it doesn't block the async loop significantly for small reports, 
                 # but better to keep it as is.
-                ReportService.generate_expiry_pdf(items, temp_path)
+                ReportService.generate_expiry_pdf(pdf_items, temp_path)
                 
                 # 4. Upload to Storage (Async)
                 async with aiofiles.open(temp_path, "rb") as f:

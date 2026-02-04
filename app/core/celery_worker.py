@@ -25,7 +25,7 @@ import app.tasks.csv_import # Fix: Register import tasks
 celery_app.conf.beat_schedule = {
     # Existing schedules
     "generate-daily-reports": {
-        "task": "app.tasks.generate_daily_reports",
+        "task": "app.tasks.report_tasks.generate_expiry_report_task",
         "schedule": crontab(
             hour=settings.REPORTS_SCHEDULE_HOUR,
             minute=settings.REPORTS_SCHEDULE_MINUTE
