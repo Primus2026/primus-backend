@@ -160,7 +160,7 @@ class AIService:
                 img.verify()  # Verify file integrity
         except (UnidentifiedImageError, OSError) as e:
             logger.error(f"Invalid image file: {tmp_file} - {e}")
-            raise ValueError("The provided file is not a valid image.")
+            raise ValueError("Podane dane nie są poprawnym zdjęciem")
 
         model = cls._get_model()
         imgsz = cls.get_preferred_image_size()

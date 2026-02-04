@@ -14,7 +14,7 @@ class RackService:
         # Check if rack with same designation already exists
         result = await db.execute(select(Rack).where(Rack.designation == rack.designation))
         if result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Rack with this designation already exists")
+            raise HTTPException(status_code=400, detail="Półka o tym oznaczeniu już istnieje")
 
         new_rack = Rack(**rack.dict())
         db.add(new_rack)
@@ -26,7 +26,7 @@ class RackService:
     async def update_rack(db: AsyncSession, rack_id: int, rack: RackUpdate) -> Rack:      
         updatedRack = await db.get(Rack, rack_id)
         if not updatedRack:
-            raise HTTPException(status_code=404, detail="Rack not found")
+            raise HTTPException(status_code=404, detail="Regał nie został znaleziony")
 
         # Check for duplicate designation ONLY if designation is being updated
         if rack.designation and rack.designation != updatedRack.designation:
@@ -34,7 +34,7 @@ class RackService:
             same_designation = result.scalar_one_or_none()
 
             if same_designation:
-                raise HTTPException(status_code=400, detail="Rack with this designation already exists")
+                raise HTTPException(status_code=400, detail="Półka o tym oznaczeniu już istnieje")
         
         update_data = rack.model_dump(exclude_unset=True)
         # Remove id from update data to avoid overwriting it (though usually it's excluded or safe)
@@ -69,16 +69,16 @@ class RackService:
 
         if curr_weight_sum is not None:
             if new_max_weight < curr_weight_sum:
-                validation_errors.append(f"New max weight ({new_max_weight}kg) is less than current load ({curr_weight_sum}kg)")
+                validation_errors.append(f"Maksymalna waga ({new_max_weight}kg) jest mniejsza niż aktualne obciążenie ({curr_weight_sum}kg)")
             
             if new_max_x < curr_max_x:
-                validation_errors.append(f"New width ({new_max_x}mm) is less than widest item ({curr_max_x}mm)")
+                validation_errors.append(f"Nowa szerokość ({new_max_x}mm) jest mniejsza niż najszerszego produktu ({curr_max_x}mm)")
             
             if new_max_y < curr_max_y:
-                validation_errors.append(f"New height ({new_max_y}mm) is less than tallest item ({curr_max_y}mm)")
+                validation_errors.append(f"Nowa wysokość ({new_max_y}mm) jest mniejsza niż najwyższego produktu ({curr_max_y}mm)")
             
             if new_max_z < curr_max_z:
-                validation_errors.append(f"New depth ({new_max_z}mm) is less than deepest item ({curr_max_z}mm)")
+                validation_errors.append(f"Nowa głębokość ({new_max_z}mm) jest mniejsza niż najgłębszego produktu ({curr_max_z}mm)")
 
             # Temp Check Logic:
             # Rack must guarantee a temp range that is SAFE for the item.
@@ -93,15 +93,15 @@ class RackService:
                 # If rack's min temp is LOWER than the highest required min temp, some item might freeze/be too cold?
                 # Actually earlier logic: Rack.temp_min >= max_req_min
                 if new_temp_min < max_req_min:
-                    validation_errors.append(f"New temp min ({new_temp_min}) is lower than required min ({max_req_min})")
+                    validation_errors.append(f"Minimalna temperatura ({new_temp_min}) jest niższa niż wymagana minimalna ({max_req_min})")
 
             if min_req_max is not None:
                 # If rack's max temp is HIGHER than the lowest required max temp, some item might overheat
                 if new_temp_max > min_req_max:
-                     validation_errors.append(f"New temp max ({new_temp_max}) is higher than required max ({min_req_max})")
+                     validation_errors.append(f"Maksymalna temperatura ({new_temp_max}) jest wyższa niż wymagana maksymalna ({min_req_max})")
 
         if validation_errors:
-            raise HTTPException(status_code=400, detail="These update values are not valid for the stock items on this rack")
+            raise HTTPException(status_code=400, detail="Te wartości są nieprawidłowe dla produktów na tym regale")
 
         for key, value in update_data.items():
             setattr(updatedRack, key, value)
@@ -109,7 +109,7 @@ class RackService:
         # Validate business rules
         if updatedRack.temp_min is not None and updatedRack.temp_max is not None:
             if updatedRack.temp_min > updatedRack.temp_max:
-                raise HTTPException(status_code=400, detail="temp_min cannot be greater than temp_max")
+                raise HTTPException(status_code=400, detail="Minimalna temperatura nie może być wyższa niż maksymalna temperatura")
 
         await db.commit()
         await db.refresh(updatedRack)
@@ -119,12 +119,12 @@ class RackService:
     async def delete_rack(db: AsyncSession, rack_id: int) -> Rack:
         rack = await db.get(Rack, rack_id)
         if not rack:
-            raise HTTPException(status_code=404, detail="Rack not found")
+            raise HTTPException(status_code=404, detail="Regał nie został znaleziony")
         
         # Check if rack has items
         result = await db.execute(select(StockItem).where(StockItem.rack_id == rack_id).limit(1))
         if result.scalar_one_or_none():
-             raise HTTPException(status_code=400, detail="Rack has items, has to be empty")
+             raise HTTPException(status_code=400, detail="Regał ma produkty, musi być pusty")
         
         await db.delete(rack)
         await db.commit()
@@ -134,7 +134,7 @@ class RackService:
     async def get_rack(db: AsyncSession, rack_id: int) -> Rack:
         rack = await db.get(Rack, rack_id)
         if not rack:
-            raise HTTPException(status_code=404, detail="Rack not found")
+            raise HTTPException(status_code=404, detail="Regał nie został znaleziony")
         return rack
 
     @staticmethod

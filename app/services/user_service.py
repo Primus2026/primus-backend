@@ -15,7 +15,7 @@ class UserService:
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User with this login already exists"
+                detail="Użytkownik z tym loginem już istnieje"
             )
 
         new_user = User(
@@ -35,7 +35,7 @@ class UserService:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unexpected error"
+                detail="Nieoczekiwany błąd"
             )
 
         return new_user
@@ -65,7 +65,7 @@ class UserService:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error during creating admin"
+                detail="Błąd podczas tworzenia administratora"
             )
 
         return new_user
@@ -81,12 +81,12 @@ class UserService:
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User does not exist"
+                detail="Użytkownik nie istnieje"
             )
         if existing_user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is already active"
+                detail="Użytkownik jest już aktywny"
             )
         
         existing_user.is_active = True 
@@ -97,10 +97,10 @@ class UserService:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error while deleting user"
+                detail="Błąd podczas aktywacji użytkownika"
             )
             
-        return {"message": "User activated successfully"} 
+        return {"message": "Użytkownik aktywowany pomyślnie"} 
     
     @staticmethod
     async def reject_user(db: AsyncSession, user_id: int):
@@ -113,12 +113,12 @@ class UserService:
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User does not exist"
+                detail="Użytkownik nie istnieje"
             )
         if existing_user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is already active"
+                detail="Użytkownik jest już aktywny"
             )
         
         await db.delete(existing_user)
@@ -129,10 +129,10 @@ class UserService:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error while deleting user"
+                detail="Błąd podczas odrzucania użytkownika"
             )
             
-        return {"message": "User deleted successfully"}
+        return {"message": "Użytkownik został odrzucony"}
         
     @staticmethod 
     async def get_all_warehouse_workers(db: AsyncSession):
@@ -162,13 +162,13 @@ class UserService:
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="Użytkownik nie istnieje"
             )
 
         if user.role == UserRole.ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot delete an administrator"
+                detail="Nie można usunąć administratora"
             )
 
         await db.delete(user)
@@ -178,6 +178,6 @@ class UserService:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error while deleting user"
+                detail="Błąd podczas usuwania użytkownika"
             )
-        return {"message": "User deleted successfully"}
+        return {"message": "Użytkownik usunięty pomyślnie"}

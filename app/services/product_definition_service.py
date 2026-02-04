@@ -1,9 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionUpdate
 from app.database.models.product_definition import ProductDefinition
+from app.database.models.stock_item import StockItem
+from app.database.models.product_stats import ProductStats
 from pathlib import Path
 from fastapi import File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, delete
 import os
 import aiofiles
 import uuid
@@ -22,19 +24,19 @@ class ProductDefinitionService:
         )
 
         if result.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Product definition with this barcode already exists")
+            raise HTTPException(status_code=409, detail="Produkt z tym kodem kreskowym już istnieje")
 
         if product_definition.req_temp_min > product_definition.req_temp_max:
-            raise HTTPException(status_code=400, detail="Required temperature min cannot be greater than required temperature max")
+            raise HTTPException(status_code=400, detail="Minimalna temperatura wymagana nie może być wyższa niż maksymalna temperatura wymagana")
 
         if product_definition.dims_x_mm < 0 or product_definition.dims_y_mm < 0 or product_definition.dims_z_mm < 0:
-            raise HTTPException(status_code=400, detail="Dimensions cannot be negative")
+            raise HTTPException(status_code=400, detail="Wymiary nie mogą być ujemne")
 
         if product_definition.expiry_days < 0:
-            raise HTTPException(status_code=400, detail="Expiry days cannot be negative")
+            raise HTTPException(status_code=400, detail="Data ważności nie może być ujemna")
 
         if product_definition.weight_kg < 0:
-            raise HTTPException(status_code=400, detail="Weight cannot be negative")
+            raise HTTPException(status_code=400, detail="Waga nie może być ujemna")
         
     @staticmethod 
     async def create_product_definition(
@@ -62,7 +64,7 @@ class ProductDefinitionService:
     ) -> ProductDefinition:
         product = await db.get(ProductDefinition, product_definition_id)
         if not product:
-            raise HTTPException(status_code=404, detail="Product definition not found")
+            raise HTTPException(status_code=404, detail="Nie znaleziono definicji produktu")
 
         update_data = product_update.dict(exclude_unset=True)
         
@@ -73,13 +75,13 @@ class ProductDefinitionService:
                 .where(ProductDefinition.barcode == update_data["barcode"])
             )
              if existing.scalar_one_or_none():
-                 raise HTTPException(status_code=409, detail="Product definition with this barcode already exists")
+                 raise HTTPException(status_code=409, detail="Produkt z tym kodem kreskowym już istnieje")
 
         # Validate logic if temps are changed
         req_min = update_data.get("req_temp_min", product.req_temp_min)
         req_max = update_data.get("req_temp_max", product.req_temp_max)
         if req_min > req_max:
-             raise HTTPException(status_code=400, detail="Required temperature min cannot be greater than required temperature max")
+             raise HTTPException(status_code=400, detail="Minimalna temperatura wymagana nie może być wyższa niż maksymalna temperatura wymagana")
 
         for key, value in update_data.items():
             setattr(product, key, value)
@@ -97,7 +99,7 @@ class ProductDefinitionService:
     ) -> ProductDefinition:
         product_definition = await db.get(ProductDefinition, product_definition_id)
         if not product_definition:
-            raise HTTPException(status_code=404, detail="Product definition not found")
+            raise HTTPException(status_code=404, detail="Nie znaleziono definicji produktu")
         
         # 1. Generate filename and path
         file_extension = os.path.splitext(file.filename)[1]
@@ -113,7 +115,7 @@ class ProductDefinitionService:
         try:
             await storage.save(relative_path, file)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Nie udało się zapisać pliku: {str(e)}")
             
         # 3. Update DB
         
@@ -168,7 +170,7 @@ class ProductDefinitionService:
     ) -> ProductDefinition:
         result = await db.get(ProductDefinition, product_definition_id)
         if not result:
-             raise HTTPException(status_code=404, detail="Product definition not found")
+             raise HTTPException(status_code=404, detail="Nie znaleziono definicji produktu")
         return result
 
     @staticmethod
@@ -189,8 +191,17 @@ class ProductDefinitionService:
     ):
         product_definition = await db.get(ProductDefinition, product_definition_id)
         if not product_definition:
-             raise HTTPException(status_code=404, detail="Product definition not found")
+             raise HTTPException(status_code=404, detail="Nie znaleziono definicji produktu")
         
+        # Check if there are any stock items for this product
+        stock_result = await db.execute(
+            select(StockItem).where(StockItem.product_id == product_definition_id)
+        )
+        if stock_result.first():
+            raise HTTPException(
+                status_code=409, 
+                detail="Nie można usunąć produktu, ponieważ istnieją powiązane z nim pozycje w magazynie."
+            )
         # Delete image file if it exists
         if product_definition.photo_path:
             # photo_path is stored as "product_images/filename.jpg"
@@ -205,9 +216,14 @@ class ProductDefinitionService:
             except Exception as e:
                  print(f"Error deleting file {clean_rel_path}: {e}")
 
+        # Delete related product stats
+        await db.execute(
+            delete(ProductStats).where(ProductStats.product_id == product_definition_id)
+        )
+
         await db.delete(product_definition)
         await db.commit()
-        return {"message": "Product definition deleted successfully"}
+        return {"message": "Produkt usunięty pomyślnie"}
 
     @staticmethod 
     async def proces_csv_import(file_content: bytes, db: AsyncSession):
@@ -254,7 +270,7 @@ class ProductDefinitionService:
                         clean_lines.append(line)
             
             if not clean_lines:
-                 return ProductImportResult(status="error", error="Could not find valid CSV header row (must contain 'Nazwa')")
+                 return ProductImportResult(status="error", error="Nie znaleziono poprawnego nagłówka CSV (musi zawierać 'Nazwa')")
 
             reader = csv.DictReader(clean_lines, delimiter=";")
             
