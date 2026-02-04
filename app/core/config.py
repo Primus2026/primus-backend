@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True)
-
+    # DEFAULT VALUES overrideable by environment variables
     PROJECT_NAME: str = "Primus 2026 Warehouse API"
     DATABASE_URL: str = "postgresql+asyncpg://user:password@postgres:5432/primus"
     API_V1_STR: str = "/api/v1"
@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     BACKUP_SCHEDULE_MINUTE: int = 0
 
     EXPECTED_CHANGE_TTL: int = 300  # 5 minutes in seconds, controls how long the expected change flag is stored in redis
-
+   
+    BACKUP_ENCRYPTION_KEY: str = "XkkN_G-SZUEXzcULZhD3b8w3noM2q_Vt4xBQxmsBDSU="
     model_config = SettingsConfigDict(
         case_sensitive=True,
         env_file=".env",
