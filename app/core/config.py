@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     BUCKET_DATASETS: str = "datasets"
     BUCKET_MODELS: str = "models"
 
+    # AI / LLM Settings
+    VOICE_LLM_PROVIDER: str = "ollama"  # or "openai"
+    OLLAMA_URL: str = "http://ollama:11434/api/generate" # Used if VOICE_LLM_PROVIDER is "ollama"
+    VOICE_LLM_API_KEY: str | None = None # Used if VOICE_LLM_PROVIDER is "openai"
+    VOICE_LLM_MODEL: str = "qwen3:4b" # Default model
+    VOICE_LLM_BASE_URL: str | None = None # Optional override for OpenAI-compatible endpoints
+
 
     REPORTS_SCHEDULE_HOUR: int = 7
     REPORTS_SCHEDULE_MINUTE: int = 30
