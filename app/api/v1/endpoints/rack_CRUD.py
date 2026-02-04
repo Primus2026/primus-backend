@@ -4,6 +4,7 @@ from app.database.session import get_db
 from app.database.models.user import User
 from app.core import deps
 from app.schemas.rack import RackCreate, RackUpdate, RackOut, RackImportResult, RackWithInventory
+from app.schemas.stock import StockOut
 from app.services.rack_service import RackService
 from app.core.celery_worker import celery_app
 from app.tasks.csv_import import import_racks as import_racks_task
@@ -94,13 +95,29 @@ async def get_import_result(
 @router.get("/inventory-state", response_model=list[RackWithInventory])
 async def get_racks_inventory_state(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    current_user: User = Depends(deps.get_current_user),
 ):
     """
     Get all racks with current inventory state (active slots and weights).
     Used by MQTT Listener to initialize cache to prevent cold start false alerts.
     """
     return await RackService.get_racks_with_inventory(db)
+
+
+@router.get("/{rack_id}/stock-items", response_model=list[StockOut], responses={
+    404: {"description": "Rack not found"}
+})
+async def get_rack_stock_items(
+    rack_id: int = Path(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+): 
+    """
+    Get all stock items for a specific rack.
+    
+    Can be executed by any authenticated user.
+    """
+    return await RackService.get_rack_stock_items(db, rack_id)
 
 
 @router.put("/{rack_id}", response_model=RackOut, responses={
@@ -144,12 +161,12 @@ async def delete_rack(
 async def get_rack(
     rack_id: int = Path(...),
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    current_user: User = Depends(deps.get_current_user),
 ): 
     """
     Get rack details by ID.
     
-    Can only be executed by an admin user.
+    Can be executed by any authenticated user.
     """
     return await RackService.get_rack(db, rack_id)
 
@@ -157,11 +174,11 @@ async def get_rack(
 @router.get("/", response_model=list[RackOut])
 async def get_all_racks(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(deps.get_current_admin),
+    current_user: User = Depends(deps.get_current_user),
 ): 
     """
     Get all racks.
     
-    Can only be executed by an admin user.
+    Can be executed by any authenticated user.
     """
     return await RackService.get_all_racks(db)

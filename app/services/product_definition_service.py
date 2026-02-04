@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.product_definition import ProductDefinitionIn
+from app.schemas.product_definition import ProductDefinitionIn, ProductDefinitionUpdate
 from app.database.models.product_definition import ProductDefinition
 from pathlib import Path
 from fastapi import File, HTTPException, UploadFile
@@ -53,6 +53,41 @@ class ProductDefinitionService:
         await db.commit()
         await db.refresh(new_product_definition)
         return new_product_definition
+
+    @staticmethod
+    async def update_product_definition(
+        db: AsyncSession,
+        product_definition_id: int,
+        product_update: "ProductDefinitionUpdate",
+    ) -> ProductDefinition:
+        product = await db.get(ProductDefinition, product_definition_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product definition not found")
+
+        update_data = product_update.dict(exclude_unset=True)
+        
+        # Validate if barcode is being changed to one that exists
+        if "barcode" in update_data and update_data["barcode"] != product.barcode:
+             existing = await db.execute(
+                select(ProductDefinition)
+                .where(ProductDefinition.barcode == update_data["barcode"])
+            )
+             if existing.scalar_one_or_none():
+                 raise HTTPException(status_code=409, detail="Product definition with this barcode already exists")
+
+        # Validate logic if temps are changed
+        req_min = update_data.get("req_temp_min", product.req_temp_min)
+        req_max = update_data.get("req_temp_max", product.req_temp_max)
+        if req_min > req_max:
+             raise HTTPException(status_code=400, detail="Required temperature min cannot be greater than required temperature max")
+
+        for key, value in update_data.items():
+            setattr(product, key, value)
+
+        db.add(product)
+        await db.commit()
+        await db.refresh(product)
+        return product
     
     @staticmethod 
     async def upload_image(
@@ -181,9 +216,14 @@ class ProductDefinitionService:
         import io 
 
         try:
-            content = file_content.decode("utf-8")
+            # Use utf-8-sig to handle BOM if present
+            content = file_content.decode("utf-8-sig")
         except UnicodeDecodeError:
-            return ProductImportResult(status="error", error="Invalid file encoding, must be UTF-8")
+            # Fallback to utf-8 if sig fails (though utf-8-sig handles no BOM too)
+            try:
+                content = file_content.decode("utf-8")
+            except UnicodeDecodeError:
+                return ProductImportResult(status="error", error="Invalid file encoding, must be UTF-8")
         
         rows: list[ProductDefinitionCSVRow] = []
         try:
@@ -191,14 +231,31 @@ class ProductDefinitionService:
             lines = [line.strip() for line in content.splitlines() if line.strip()]
             
             clean_lines = []
-            for line in lines:
-                # If line is header (starts with #Nazwa), strip #
-                # If line is comment (starts with # but not header), skip
-                if line.startswith("#Nazwa"):
-                    clean_lines.append(line.lstrip("#"))
-                elif not line.startswith("#"):
-                    clean_lines.append(line)
+            header_found = False
             
+            for line in lines:
+                # 1. Skip comments that are NOT part of the header block
+                if line.startswith("#") and "Nazwa" not in line:
+                    continue
+                
+                # 2. Identify Header Line
+                # We look for "Nazwa" because it's the first required column alias
+                if not header_found:
+                    if "Nazwa" in line:
+                        # Found header!
+                        header_found = True
+                        clean_lines.append(line.lstrip("#")) # Remove comment char if present in header
+                    else:
+                        # Skip garbage lines before header
+                        continue
+                else:
+                    # 3. Process Data Lines
+                    if not line.startswith("#"):
+                        clean_lines.append(line)
+            
+            if not clean_lines:
+                 return ProductImportResult(status="error", error="Could not find valid CSV header row (must contain 'Nazwa')")
+
             reader = csv.DictReader(clean_lines, delimiter=";")
             
             for i, row_dict in enumerate(reader):
@@ -245,9 +302,24 @@ class ProductDefinitionService:
                 db.add(definition)
             
             await db.commit()
+            
+            # Construct summary
+            summary = {
+                "total_processed": len(rows),
+                "created_count": len(new_definitions),
+                "updated_count": 0,
+                "skipped_count": 0,
+                "skipped_details": [],
+                "success_count": len(new_definitions), # Backend schema uses success_count
+                "error_count": 0,
+                "errors": [],
+                "successes": []
+            }
+            
             return ProductImportResult(
-                status="success", 
-                message=f"Successfully imported {len(new_definitions)} product definitions."
+                status="completed", 
+                message=f"Successfully imported {len(new_definitions)} product definitions.",
+                summary=summary
             )
             
         except Exception as e:

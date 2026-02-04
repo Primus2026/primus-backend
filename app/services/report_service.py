@@ -5,6 +5,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from datetime import datetime
 from typing import List
 from pathlib import Path
+import os
 from app.database.models.stock_item import StockItem
 from app.database.models.rack import Rack
 from app.database.models.alert import Alert
@@ -15,13 +16,42 @@ from reportlab.pdfbase.ttfonts import TTFont
 class ReportService:
     @staticmethod
     def _register_fonts():
+        # Common locations for DejaVuSans on Linux/Debian/Alpine
+        possible_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/ttf/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/usr/local/share/fonts/DejaVuSans.ttf"
+            # Add more if needed
+        ]
+        
+        font_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                font_path = p
+                break
+        
+        if not font_path:
+             print("Warning: DejaVuSans font not found. Using default default Helvetica which lacks utf-8.")
+             return False
+
         try:
-            # Common locations for DejaVuSans on Linux/Debian
-            pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-            pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
-            return True
-        except Exception:
-            # Fallback if fonts not found (local dev), but warn
+             # Register Regular
+             pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+             
+             # Try Bold (heuristics: same dir, -Bold suffix)
+             base_dir = os.path.dirname(font_path)
+             bold_path = os.path.join(base_dir, "DejaVuSans-Bold.ttf")
+             
+             if os.path.exists(bold_path):
+                 pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', bold_path))
+             else:
+                 # Fallback bold to regular to avoid crash/missing font error
+                 pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
+                 
+             return True
+        except Exception as e:
+            print(f"Error registering fonts: {e}")
             return False
 
     @staticmethod
@@ -286,6 +316,75 @@ class ReportService:
             elements.append(t_alerts)
         else:
              elements.append(Paragraph("Brak aktywnych alertów.", styles['BodyText']))
+
+        doc.build(elements)
+        return filepath.name
+    @staticmethod
+    def generate_temp_pdf(alerts: List[Alert], filepath: Path) -> str:
+        """
+        Generates a temperature report showing exceeded ranges.
+        """
+        # Register fonts or fallback
+        if ReportService._register_fonts():
+            font_regular = 'DejaVuSans'
+            font_bold = 'DejaVuSans-Bold'
+        else:
+            font_regular = 'Helvetica'
+            font_bold = 'Helvetica-Bold'
+        
+        doc = SimpleDocTemplate(str(filepath), pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Update styles
+        styles['Heading1'].fontName = font_bold
+        styles['BodyText'].fontName = font_regular
+        styles['Normal'].fontName = font_regular
+
+        # Title
+        title_style = styles['Heading1']
+        title_style.alignment = 1 # Center
+        elements.append(Paragraph(f"Raport Temperatury - {datetime.now().strftime('%Y-%m-%d %H:%M')}", title_style))
+        elements.append(Spacer(1, 20))
+        
+        elements.append(Paragraph("Wykaz przekroczonych temperatur:", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        
+        # Table Header
+        data = [["Data", "Godzina", "Regał / Asortyment", "Komunikat"]]
+        
+        table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), font_bold),
+            ('FONTNAME', (0, 1), (-1, -1), font_regular),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ])
+
+        if not alerts:
+             elements.append(Paragraph("Brak zarejestrowanych przekroczeń temperatur.", styles['BodyText']))
+        else:
+            for alert in alerts:
+                target = "Nieznany"
+                if alert.rack:
+                    target = f"Regał {alert.rack.designation}"
+                elif alert.product:
+                    target = f"Produkt {alert.product.name} ({alert.product.barcode})"
+                
+                row = [
+                    alert.created_at.strftime('%Y-%m-%d'),
+                    alert.created_at.strftime('%H:%M:%S'),
+                    target,
+                    alert.message
+                ]
+                data.append(row)
+            
+            t = Table(data, colWidths=[80, 80, 200, 200])
+            t.setStyle(table_style)
+            elements.append(t)
 
         doc.build(elements)
         return filepath.name

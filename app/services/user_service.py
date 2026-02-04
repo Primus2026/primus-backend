@@ -153,3 +153,31 @@ class UserService:
             )
         )
         return result.scalars().all()
+
+    @staticmethod
+    async def delete_user(db: AsyncSession, user_id: int):
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        if user.role == UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot delete an administrator"
+            )
+
+        await db.delete(user)
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error while deleting user"
+            )
+        return {"message": "User deleted successfully"}
