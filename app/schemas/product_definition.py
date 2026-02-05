@@ -33,6 +33,20 @@ class ProductDefinitionIn(BaseModel):
         }
     )
 
+class ProductDefinitionUpdate(BaseModel):
+    name: Optional[str] = None
+    barcode: Optional[str] = None
+    req_temp_min: Optional[float] = None
+    req_temp_max: Optional[float] = None
+    weight_kg: Optional[float] = None
+    dims_x_mm: Optional[int] = None
+    dims_y_mm: Optional[int] = None
+    dims_z_mm: Optional[int] = None
+    is_dangerous: Optional[bool] = None
+    comment: Optional[str] = None
+    expiry_days: Optional[int] = None
+    frequency_class: Optional[FrequencyClass] = None
+
 class ProductDefinitionOut(BaseModel):
     id: int
     name: str
@@ -48,6 +62,13 @@ class ProductDefinitionOut(BaseModel):
     comment: Optional[str] = None
     expiry_days: int
     frequency_class: FrequencyClass
+
+    @validator("photo_path", pre=True, always=True)
+    def resolve_photo_url(cls, v):
+        if v:
+            from app.core.storage import storage
+            return storage.get_url(v)
+        return v
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,8 +114,12 @@ class ProductDefinitionCSVRow(BaseModel):
 
 class ProductImportSummary(BaseModel):
     total_processed: int = Field(0, description="Total rows processed")
-    success_count: int = Field(0, description="Rows successfully imported")
-    error_count: int = Field(0, description="Rows failed")
+    created_count: int = Field(0, description="Rows created")
+    updated_count: int = Field(0, description="Rows updated")
+    skipped_count: int = Field(0, description="Rows skipped")
+    skipped_details: List[dict] = Field([], description="Details of skipped rows")
+    success_count: int = Field(0, description="Rows successfully imported (Legacy)")
+    error_count: int = Field(0, description="Rows failed (Legacy)")
     errors: List[str] = Field([], description="List of error messages")
     successes: List[dict] = Field([], description="Details of successful imports")
 

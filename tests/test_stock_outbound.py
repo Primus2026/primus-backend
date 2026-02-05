@@ -9,6 +9,7 @@ from app.services.stock_service import StockService
 from fastapi import HTTPException
 from sqlalchemy import select
 
+import json
 # Mock Redis
 mock_redis = AsyncMock()
 
@@ -63,7 +64,9 @@ async def test_initiate_success(
     mock_redis.set.assert_called()
     args, kwargs = mock_redis.set.call_args
     assert args[0] == expected_key
-    assert args[1] == user.id 
+    # Value should be a JSON string containing at least user_id
+    val = json.loads(args[1])
+    assert val['user_id'] == user.id 
 
 @pytest.mark.asyncio
 async def test_confirm_success(
@@ -98,7 +101,7 @@ async def test_confirm_success(
     await db_session.commit()
 
     # Mock Redis Get
-    mock_redis.get.return_value = user.id 
+    mock_redis.get.return_value = json.dumps({"user_id": user.id, "type": "OUTBOUND", "expected_weight": 0.0}) 
     mock_redis.get.side_effect = None
     
     payload = RackLocation(
@@ -129,7 +132,7 @@ async def test_cancel_success(
     await db_session.commit()
     await db_session.refresh(user)
 
-    mock_redis.get.return_value = user.id
+    mock_redis.get.return_value = json.dumps({"user_id": user.id, "type": "OUTBOUND", "expected_weight": 0.0})
     mock_redis.get.side_effect = None
     
     payload = RackLocation(
@@ -229,8 +232,8 @@ async def test_outbound_confirm_forbidden(
     db_session.add_all([user_a, user_b])
     await db_session.commit()
 
-    # Mock Redis: Stored value is User A's ID
-    mock_redis.get.return_value = str(user_a.id)
+    # Mock Redis: Stored value is a JSON string with User A's ID
+    mock_redis.get.return_value = json.dumps({"user_id": user_a.id, "type": "OUTBOUND", "expected_weight": 0.0})
     mock_redis.get.side_effect = None
     
     payload = RackLocation(

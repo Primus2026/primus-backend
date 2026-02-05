@@ -16,11 +16,14 @@ from app.core.redis_client import RedisClient
 from app.database.session import SessionLocal
 from app.services.weight_service import WeightService
 
+from app.database.init_db import init_db
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     redis_client = RedisClient.get_client()
     async with SessionLocal() as db:
+        await init_db(db)
         await WeightService.calculate_and_cache_weights(db)
     yield
     # Shutdown
