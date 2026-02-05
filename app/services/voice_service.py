@@ -18,7 +18,7 @@ class VoiceService:
 You are a warehouse assistant. Your ONLY job is to extract the intent from the user's command and output strict JSON.
 NO explanations. NO markdown. NO extra text.
 
-AVAILABLE PRODUCTS (Name -> Barcode):
+AVAILABLE PRODUCTS - USE ONLY THESE NAMES AND BARCODES, OTHERWISE RETURN UNKNOWN (Name -> Barcode):
 {product_list_str}
 
 Supported Intents:
