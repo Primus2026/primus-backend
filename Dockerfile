@@ -2,18 +2,21 @@
 FROM python:3.11-slim as builder
 WORKDIR /app
 RUN pip install --no-cache-dir poetry
+ENV POETRY_HTTP_TIMEOUT=1200
 
 # Copy the TOML with the CPU source config
 COPY pyproject.toml poetry.lock* ./
 
 # 1. Build Backend Venv (Lightweight, No AI)
-RUN poetry config virtualenvs.in-project true \
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    poetry config virtualenvs.in-project true \
     && poetry install --without ai --no-interaction --no-ansi --no-root \
     && mv .venv .venv-backend
 
 # 2. Build Worker Venv (Includes AI + GPU Torch support)
 # Poetry will pull standard wheels from PyPI which support CUDA
-RUN rm -rf .venv \
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    rm -rf .venv \
     && poetry config virtualenvs.in-project true \
     && poetry install --with ai --no-interaction --no-ansi --no-root \
     && mv .venv .venv-worker
