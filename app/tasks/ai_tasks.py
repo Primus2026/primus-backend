@@ -3,7 +3,7 @@ from app.services.ai_service import AIService
 from celery.utils.log import get_task_logger
 import os
 import asyncio
-from app.database.session import SessionLocal
+from app.database.session import SyncSessionLocal
 from app.database.models.product_definition import ProductDefinition
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -41,7 +41,7 @@ def retrain_model_task(self):
 def fetch_product_details(product_id: int) -> tuple[str, str]:
     # Sync DB fetch
     try:
-        with SessionLocal() as session:
+        with SyncSessionLocal() as session:
             stmt = select(ProductDefinition).where(ProductDefinition.id == product_id)
             product = session.execute(stmt).scalars().first()
             if product:

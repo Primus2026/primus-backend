@@ -26,25 +26,38 @@ Supported Intents:
 1. GENERATE REPORT
    - Keywords: "raport", "zestawienie", "generate report"
    - JSON: {{"action": "report_generate", "parameters": {{"type": "inventory" | "expiry" | "temperature" | "audit"}}}}
+   - INSTRUCTIONS:
+     - "expiry" = Raport Terminów Ważności (Produkty przeterminowane/bliskie terminu)
+     - "temperature" = Raport Temperatur
+     - "audit" = Pełny Audyt Magazynu
    - Examples:
-     "Daj mi raport inwentaryzacji" -> {{"action": "report_generate", "parameters": {{"type": "inventory"}}}}
      "Sprawdź temperatury" -> {{"action": "report_generate", "parameters": {{"type": "temperature"}}}}
 
 2. INBOUND PROCESS (Przyjęcie Towaru)
    - Keywords: "przyjmij", "dodaj na stan", "inbound", "odbierz"
    - JSON: {{"action": "process_inbound", "parameters": {{"product_name": "string", "barcode": "string", "quantity": "integer"}}}}
-   - INSTRUCTIONS: Match the product name to the "AVAILABLE PRODUCTS" list. Set "barcode" to the corresponding ID.
+   - INSTRUCTIONS: 
+     - Match the product name EXACTLY to the "AVAILABLE PRODUCTS" list. Do not use generic names if a specific one exists (e.g. use "Mleko 3.2%" instead of "mleko").
+     - Set "barcode" to the corresponding ID from the list.
+     - IF QUANTITY IS NOT MENTIONED, DEFAULT TO 1.
    - Examples:
-     "Przyjmij 50 sztuk mleka" -> {{"action": "process_inbound", "parameters": {{"product_name": "mleko", "barcode": "123456", "quantity": 50}}}}
+     "Przyjmij 50 sztuk mleka" -> {{"action": "process_inbound", "parameters": {{"product_name": "Mleko 3.2%", "barcode": "123456", "quantity": 50}}}}
      "Rozpocznij przyjęcie" -> {{"action": "process_inbound", "parameters": {{}}}}
+     "Przyjmij paletę wody" -> {{"action": "process_inbound", "parameters": {{"product_name": "Woda Mineralna", "barcode": "789012", "quantity": 1}}}}
+     "Dodaj na stan Colę" -> {{"action": "process_inbound", "parameters": {{"product_name": "Coca Cola 0.5L", "barcode": "111222", "quantity": 1}}}}
 
 3. OUTBOUND PROCESS (Wydanie Towaru)
    - Keywords: "wydaj", "zdejmij", "outbound", "wysyłka"
    - JSON: {{"action": "process_outbound", "parameters": {{"product_name": "string", "barcode": "string", "quantity": "integer"}}}}
-   - INSTRUCTIONS: Match the product name to the "AVAILABLE PRODUCTS" list. Set "barcode" to the corresponding ID.
+   - INSTRUCTIONS: 
+     - Match the product name EXACTLY to the "AVAILABLE PRODUCTS" list.
+     - Set "barcode" to the corresponding ID.
+     - IF QUANTITY IS NOT MENTIONED, DEFAULT TO 1.
    - Examples:
-     "Wydaj paletę wody" -> {{"action": "process_outbound", "parameters": {{"product_name": "woda", "barcode": "789012"}}}}
+     "Wydaj paletę wody" -> {{"action": "process_outbound", "parameters": {{"product_name": "Woda Mineralna", "barcode": "789012", "quantity": 1}}}}
      "Przygotuj wysyłkę" -> {{"action": "process_outbound", "parameters": {{}}}}
+     "Zdejmij mleko" -> {{"action": "process_outbound", "parameters": {{"product_name": "Mleko 3.2%", "barcode": "123456", "quantity": 1}}}}
+     "Wydaj 5 sztuk Acetonu" -> {{"action": "process_outbound", "parameters": {{"product_name": "Aceton techniczny", "barcode": "QR-ACETON-001", "quantity": 5}}}}
 
 4. UNKNOWN
    - If unclear: {{"action": "unknown", "parameters": {{}}}}
