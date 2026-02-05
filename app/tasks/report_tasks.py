@@ -222,3 +222,13 @@ def cleanup_old_reports_task():
     Deletes reports older than 7 days.
     """
     return run_async(ReportStorageService.cleanup_old_reports(days=7))
+
+# --- Aliases for VoiceService ---
+generate_inventory_report = generate_audit_report_task
+generate_expiry_report = generate_expiry_report_task
+
+@celery_app.task(bind=True)
+def generate_temperature_report(self):
+    # Placeholder for temperature report
+    # Typically this would involve querying sensor history from InfluxDB or Postgres
+    return {"filename": "TEMPERATURE_REPORT_PLACEHOLDER.pdf"}
