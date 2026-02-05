@@ -18,6 +18,24 @@ class AIService:
     _model = None
 
     @classmethod
+    def _run_sync(cls, coro):
+        """
+        Safely runs an awaitable from a synchronous context.
+        Handles cases where an event loop is already running in the current thread.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor() as executor:
+                return executor.submit(lambda: asyncio.run(coro)).result()
+        else:
+            return asyncio.run(coro)
+
+    @classmethod
     def _get_model(cls):
         """Loads the model once and caches it."""
         if cls._model is None:
@@ -42,7 +60,7 @@ class AIService:
             
             storage_model_exists = False
             try:
-                storage_model_exists = asyncio.run(check_and_download_model())
+                storage_model_exists = cls._run_sync(check_and_download_model())
             except Exception as e:
                 logger.warning(f"Failed to check storage for model: {e}")
 
@@ -188,8 +206,8 @@ class AIService:
         path = f"datasets/{product_id}/{filename}"
         await storage.save(path, content)
 
-    @staticmethod
-    def _download_dataset(dest_dir: str) -> bool:
+    @classmethod
+    def _download_dataset(cls, dest_dir: str) -> bool:
         """
         Downloads valid training images from storage to local dest_dir.
         Returns True if data found.
@@ -228,11 +246,11 @@ class AIService:
                     logger.error(f"Failed to download {storage_path}: {e}")
             return has_data
 
-        return asyncio.run(_download_logic())
+        return cls._run_sync(_download_logic())
 
-    @staticmethod
+    @classmethod
     def _prepare_split_dataset(
-        source_dir: str, dest_dir: str, split_ratio: float = 0.8
+        cls, source_dir: str, dest_dir: str, split_ratio: float = 0.8
     ):
         """
         Creates a train/val split structure from dataset directory.
@@ -355,7 +373,7 @@ class AIService:
                     return True
                 return False
 
-            success = asyncio.run(upload_artifacts())
+            success = cls._run_sync(upload_artifacts())
 
             if success:
                 r.publish("ai_model_update", "reload")

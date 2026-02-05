@@ -21,4 +21,10 @@ api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(stock_inbound.router, prefix="/stock/inbound", tags=["Stock Inbound"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI Recognition"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["Alerts"])
+
+from app.api.v1.endpoints import voice
+api_router.include_router(voice.router, prefix="/voice-command", tags=["Voice Command"])
+ 
+
 api_router.include_router(backups.router, prefix="/backups", tags=["backups"])
+
