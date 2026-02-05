@@ -1,98 +1,74 @@
 import os
-import tarfile
-import subprocess
-import logging
-from datetime import datetime
-from app.core.config import settings
-import aiofiles
 import asyncio
+import aiofiles
+import logging
 import shutil
+import tarfile
+from datetime import datetime
+from cryptography.fernet import Fernet
+
+from app.core.config import settings
 from app.core.storage import storage
 
 logger = logging.getLogger("BACKUP_SERVICE")
 
 class BackupService:
-    
+    # Inicjalizacja szyfratora - klucz musi być w Base64 (wygenerowany przez Fernet.generate_key())
+    _cipher = Fernet(settings.BACKUP_ENCRYPTION_KEY.encode()) if settings.BACKUP_ENCRYPTION_KEY else None
+
     @staticmethod
     def _get_backup_filename() -> str:
-        return f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        return f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
 
     @staticmethod
     async def create_backup() -> str:
-        """
-        Creates a full backup including PostgreSQL dump and media files (MinIO).
-        Saves locally to persistent storage /app/backups.
-        """
-        base_name = BackupService._get_backup_filename()
-        tmp_dir = os.path.join("/tmp", base_name)
+        """Tworzy pełny backup: DB dump + Media z MinIO, szyfruje i wysyła do MinIO."""
+        archive_name = BackupService._get_backup_filename()
+        tmp_dir = os.path.join("/tmp", archive_name.replace(".tar.gz", ""))
+        archive_tmp_path = os.path.join("/tmp", archive_name)
+        
         os.makedirs(tmp_dir, exist_ok=True)
         
-        # Local Persistent Backup Dir
-        local_backup_dir = "/app/backups"
-        os.makedirs(local_backup_dir, exist_ok=True)
-        
         try:
-            # 1. Database Dump
+            # 1. Zrzut bazy danych (PostgreSQL)
             sql_file = os.path.join(tmp_dir, "dump.sql")
+            # Konwersja URL dla pg_dump (asyncpg -> postgresql)
             db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
             
             logger.info("Starting database dump...")
-            
-            # pg_dump command
             cmd = f"pg_dump '{db_url}' --format=custom --file='{sql_file}'"
-            
-            process = await asyncio.create_subprocess_shell(
-                cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
+            process = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE)
+            _, stderr = await process.communicate()
             
             if process.returncode != 0:
                 raise Exception(f"pg_dump failed: {stderr.decode()}")
-            
-            logger.info("Database dump completed.")
 
-            # 2. Download Media from MinIO
-            # Structure in archive: media/product_images/..., media/reports/...
+            # 2. Pobranie mediów z MinIO do folderu tymczasowego
             media_tmp_dir = os.path.join(tmp_dir, "media")
-            os.makedirs(media_tmp_dir, exist_ok=True)
-
-            prefixes_to_backup = ["product_images", "reports"]
+            prefixes = ["product_images", "reports", "datasets", "models"]
             
-            for prefix in prefixes_to_backup:
-                logger.info(f"Backing up {prefix} from storage...")
-                # Use prefix + "/" to ensure we map to the bucket root key prefix correctly
+            for prefix in prefixes:
+                logger.info(f"Downloading {prefix} for backup...")
                 files = await storage.list(f"{prefix}/", recursive=True)
                 for file_info in files:
-                    file_name = file_info['name'] # relative to prefix e.g. "image.jpg"
-                    storage_path = f"{prefix}/{file_name}"
-                    
-                    # Destination path in tmp
-                    dest_path = os.path.join(media_tmp_dir, prefix, file_name)
+                    storage_path = f"{prefix}/{file_info['name']}"
+                    dest_path = os.path.join(media_tmp_dir, prefix, file_info['name'])
                     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
                     
-                    try:
-                        content = await storage.get(storage_path)
-                        async with aiofiles.open(dest_path, "wb") as f:
-                            await f.write(content)
-                    except Exception as e:
-                         logger.warning(f"Failed to backup file {storage_path}: {e}")
+                    content = await storage.get(storage_path)
+                    async with aiofiles.open(dest_path, "wb") as f:
+                        await f.write(content)
 
-            # 3. Create Archive
-            archive_name = f"{base_name}.tar.gz"
-            archive_path = os.path.join("/tmp", archive_name)
-            
+            # 3. Tworzenie archiwum TAR.GZ
             logger.info("Creating archive...")
+            await asyncio.to_thread(BackupService._create_tar, archive_tmp_path, tmp_dir, media_tmp_dir)
             
-            # Run tar in a thread to not block event loop
-            # Pass media_tmp_dir as the media directory to archive
-            await asyncio.to_thread(BackupService._create_tar, archive_path, tmp_dir, media_tmp_dir)
-            
-            # 4. Save to Local Persistent Backup Dir
-            final_path = os.path.join(local_backup_dir, archive_name)
-            logger.info(f"Saving backup to persistent local storage: {final_path}")
-            shutil.move(archive_path, final_path)
+            # 4. Szyfrowanie i wysyłka do bucketu 'backups'
+            logger.info(f"Encrypting and uploading: backups/{archive_name}")
+            async with aiofiles.open(archive_tmp_path, "rb") as f:
+                raw_data = await f.read()
+                encrypted_data = BackupService._cipher.encrypt(raw_data)
+                await storage.save(f"backups/{archive_name}", encrypted_data)
                 
             return archive_name
             
@@ -100,130 +76,86 @@ class BackupService:
             logger.error(f"Backup failed: {e}")
             raise e
         finally:
-            # Cleanup
             if os.path.exists(tmp_dir):
                 shutil.rmtree(tmp_dir)
-            if 'archive_path' in locals() and os.path.exists(archive_path):
-                # Only try to remove if it wasn't moved
-                if os.path.exists(archive_path):
-                    os.remove(archive_path)
-
-    @staticmethod
-    def _create_tar(archive_path: str, sql_dir: str, media_dir: str):
-        with tarfile.open(archive_path, "w:gz") as tar:
-            # Add SQL dump - sql_dir is actually the tmp_dir containing dump.sql
-            dump_path = os.path.join(sql_dir, "dump.sql")
-            if os.path.exists(dump_path):
-                tar.add(dump_path, arcname="db/dump.sql")
-            
-            # Add Media
-            # We want the archive to contain media/product_images/...
-            # media_dir contains product_images/ and reports/
-            if os.path.exists(media_dir):
-                 tar.add(media_dir, arcname="media")
-
-    @staticmethod
-    async def list_backups() -> list[dict]:
-        """Lists available backups from local persistence."""
-        backups = []
-        local_backup_dir = "/app/backups"
-        
-        if os.path.exists(local_backup_dir):
-            try:
-                for filename in os.listdir(local_backup_dir):
-                    if filename.endswith(".tar.gz"):
-                         filepath = os.path.join(local_backup_dir, filename)
-                         try:
-                             stat = os.stat(filepath)
-                             backups.append({
-                                 "name": filename,
-                                 "size": stat.st_size,
-                                 "modified": stat.st_mtime,
-                                 "source": "local" 
-                             })
-                         except OSError:
-                             continue
-            except Exception as e:
-                logger.error(f"Failed to list local backups: {e}")
-
-        backups.sort(key=lambda x: x['name'], reverse=True)
-        return backups
+            if os.path.exists(archive_tmp_path):
+                os.remove(archive_tmp_path)
 
     @staticmethod
     async def restore_backup(filename: str):
-        """
-        Restores backup from local storage.
-        WARNING: This overwrites current data.
-        """
-        base_name = filename.replace(".tar.gz", "")
-        tmp_dir = os.path.join("/tmp", f"restore_{base_name}")
-        local_backup_path = os.path.join("/app/backups", filename)
-        
-        if not os.path.exists(local_backup_path):
-             raise FileNotFoundError(f"Backup file not found: {filename}")
-
-        os.makedirs(tmp_dir, exist_ok=True)
+        """Pobiera backup, odszyfrowuje go i przywraca bazę oraz pliki."""
+        tmp_dir = os.path.join("/tmp", f"restore_{filename.replace('.tar.gz', '')}")
+        archive_tmp_path = os.path.join("/tmp", filename)
         
         try:
-            # 1. Extract
-            logger.info(f"Extracting {filename}...")
-            await asyncio.to_thread(BackupService._extract_tar, local_backup_path, tmp_dir)
+            # 1. Pobranie i odszyfrowanie
+            logger.info(f"Fetching and decrypting {filename}...")
+            encrypted_content = await storage.get(f"backups/{filename}")
+            decrypted_content = BackupService._cipher.decrypt(encrypted_content)
             
-            # 2. Restore DB
+            async with aiofiles.open(archive_tmp_path, "wb") as f:
+                await f.write(decrypted_content)
+
+            # 2. Rozpakowanie
+            os.makedirs(tmp_dir, exist_ok=True)
+            await asyncio.to_thread(BackupService._extract_tar, archive_tmp_path, tmp_dir)
+            
+            # 3. Przywracanie Bazy Danych
             sql_file = os.path.join(tmp_dir, "db", "dump.sql")
-            if not os.path.exists(sql_file):
-                 raise Exception("Backup archive does not contain db/dump.sql")
-            
-            logger.info("Restoring database...")
-            # Using pg_restore for custom format
-            db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-            cmd = f"pg_restore --clean --if-exists --no-owner --dbname='{db_url}' '{sql_file}'"
-            
-            process = await asyncio.create_subprocess_shell(
-                cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            
-            if process.returncode != 0:
-                logger.warning(f"pg_restore finished with code {process.returncode}: {stderr.decode()}")
-                
-            logger.info("Database restoration completed.")
-            
-            # 3. Restore Media to MinIO
+            if os.path.exists(sql_file):
+                logger.info("Restoring database...")
+                db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+                # --clean usuwa istniejące tabele przed odtworzeniem
+                cmd = f"pg_restore --clean --if-exists --no-owner --dbname='{db_url}' '{sql_file}'"
+                process = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE)
+                _, stderr = await process.communicate()
+                if process.returncode != 0:
+                    logger.warning(f"pg_restore notice: {stderr.decode()}")
+
+            # 4. Przywracanie Mediów do MinIO
             extracted_media = os.path.join(tmp_dir, "media")
             if os.path.exists(extracted_media):
-                logger.info("Restoring media files to storage...")
-                
-                # Walk through extracted media
-                for root, dirs, files in os.walk(extracted_media):
+                logger.info("Restoring media files to MinIO...")
+                for root, _, files in os.walk(extracted_media):
                     for file in files:
                         full_path = os.path.join(root, file)
-                        # Determine relative path from 'media' root
-                        # extracted_media is .../media
-                        # file is .../media/product_images/foo.jpg
-                        # relative should be product_images/foo.jpg
+                        # Ścieżka relatywna do 'media', np. 'product_images/foto.jpg'
+                        rel_path = os.path.relpath(full_path, extracted_media)
                         
-                        relative_path = os.path.relpath(full_path, extracted_media)
-                        
-                        # Upload to storage
-                        # Using aiofiles to read
-                        try:
-                            async with aiofiles.open(full_path, "rb") as f:
-                                content = await f.read()
-                                await storage.save(relative_path, content)
-                        except Exception as e:
-                            logger.error(f"Failed to restore file {relative_path}: {e}")
+                        async with aiofiles.open(full_path, "rb") as f:
+                            content = await f.read()
+                            await storage.save(rel_path, content)
+            
+            logger.info("Restore completed successfully.")
                 
         except Exception as e:
             logger.error(f"Restore failed: {e}")
             raise e
         finally:
-             if os.path.exists(tmp_dir):
+            if os.path.exists(tmp_dir):
                 shutil.rmtree(tmp_dir)
+            if os.path.exists(archive_tmp_path):
+                os.remove(archive_tmp_path)
+
+    @staticmethod
+    def _create_tar(archive_path: str, sql_dir: str, media_dir: str):
+        with tarfile.open(archive_path, "w:gz") as tar:
+            dump_path = os.path.join(sql_dir, "dump.sql")
+            if os.path.exists(dump_path):
+                tar.add(dump_path, arcname="db/dump.sql")
+            if os.path.exists(media_dir):
+                tar.add(media_dir, arcname="media")
 
     @staticmethod
     def _extract_tar(archive_path: str, extract_path: str):
         with tarfile.open(archive_path, "r:gz") as tar:
             tar.extractall(path=extract_path)
+
+    @staticmethod
+    async def list_backups() -> list[dict]:
+        """Listuje backupy bezpośrednio z MinIO."""
+        backups = await storage.list("backups/", recursive=True)
+        for b in backups:
+            b["source"] = "minio"
+        backups.sort(key=lambda x: x['name'], reverse=True)
+        return backups

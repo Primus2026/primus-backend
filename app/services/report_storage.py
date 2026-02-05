@@ -12,7 +12,7 @@ class ReportStorageService:
         Returns the relative path key for storage.
         """
         if ".." in filename or "/" in filename or "\\" in filename:
-             raise HTTPException(status_code=400, detail="Invalid filename")
+             raise HTTPException(status_code=400, detail="Nieprawidłowa nazwa pliku")
         
         # Reports are stored under "reports" logical prefix
         return f"reports/{filename}"
@@ -52,7 +52,7 @@ class ReportStorageService:
         try:
             return await storage.get(path)
         except Exception:
-            raise HTTPException(status_code=404, detail="Report not found")
+            raise HTTPException(status_code=404, detail="Raport nie został znaleziony")
 
     @classmethod
     async def save_report(cls, filename: str, content: bytes) -> str:

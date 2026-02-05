@@ -17,6 +17,7 @@ class AlertService:
         if not alert:
             raise HTTPException(status_code=404, detail="Alert not found")
         alert.is_resolved = True
+        alert.is_sent = True
         await db.commit()
         return alert
 
@@ -65,8 +66,15 @@ class AlertService:
         return result.scalars().all()
 
     @staticmethod
-    async def get_alerts(db: AsyncSession):
-        stmt = select(Alert)
+    async def get_alerts(db: AsyncSession, is_resolved: bool | None = None, is_sent: bool | None = None):
+        stmt = select(Alert).order_by(Alert.created_at.desc())
+        
+        if is_resolved is not None:
+            stmt = stmt.where(Alert.is_resolved == is_resolved)
+            
+        if is_sent is not None:
+             stmt = stmt.where(Alert.is_sent == is_sent)
+             
         result = await db.execute(stmt)
         return result.scalars().all()
 

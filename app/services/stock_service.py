@@ -40,7 +40,7 @@ class StockService:
         itemToRemove = result.scalars().first()
 
         if not itemToRemove:
-            raise HTTPException(status_code=404, detail="Stock item not found")
+            raise HTTPException(status_code=404, detail="Produkt nie został znaleziony")
 
         # Set the expected change flag with format key ${rack_id}:${row}:${col} value ${user_id}
         key = f"ExpectedChange:{itemToRemove.rack.designation}:{itemToRemove.position_row}:{itemToRemove.position_col}"
@@ -74,7 +74,7 @@ class StockService:
         if not expectedChange:
             raise HTTPException(
                 status_code=404,
-                detail="No expected change found for this rack location, please initiate the outbound process first",
+                detail="Nie znaleziono oczekiwanej zmiany dla tej lokalizacji, proszę zainicjować proces najpierw",
             )
 
         # The cached value is the issuers user_id
@@ -94,7 +94,7 @@ class StockService:
             )
             raise HTTPException(
                 status_code=403,
-                detail="You are not authorized to confirm this outbound process",
+                detail="Nie jesteś upoważniony do potwierdzenia tego procesu",
             )
 
         stmt = (
@@ -138,7 +138,7 @@ class StockService:
         if not expectedChange:
             raise HTTPException(
                 status_code=404,
-                detail="No expected change found for this rack location, please initiate the outbound process first",
+                detail="Nie znaleziono oczekiwanej zmiany dla tej lokalizacji, proszę zainicjować proces najpierw",
             )
 
         # the cached value is the issuers user_id
@@ -151,7 +151,7 @@ class StockService:
         if str(cached_user_id) != str(user.id):
             raise HTTPException(
                 status_code=403,
-                detail="You are not authorized to cancel this outbound process",
+                detail="Nie jesteś upoważniony do anulowania tego procesu",
             )
 
         await redis_client.delete(
@@ -240,7 +240,7 @@ class StockService:
         if not rack:
             raise HTTPException(
                 status_code=404,
-                detail="Rack location not found",
+                detail="Regał nie został znaleziony",
             )
         
         stock_item = await db.execute(
@@ -255,8 +255,8 @@ class StockService:
         if not stock_item:
             raise HTTPException(
                 status_code=404,
-                detail="Stock item not found",
-            )
+                detail="Produkt nie został znaleziony",
+            )   
         
         await db.delete(stock_item)
         await db.commit()
@@ -264,4 +264,4 @@ class StockService:
         # Update product stats
         await ProductStatsService.update_product_stats(db, stock_item.product_id, 1, redis_client)
         
-        return Msg(message="Stock item removed successfully")        
+        return Msg(message="Produkt został usunięty pomyślnie")        

@@ -26,7 +26,7 @@ class AuthService:
         if not user or not security.verify_password(password, user.password_hash):
             return None
         if user.is_active == False:
-            raise HTTPException(status_code=401, detail="Inactive user")
+            raise HTTPException(status_code=401, detail="Nieaktywny użytkownik")
         return user
 
     @staticmethod
@@ -79,7 +79,7 @@ class AuthService:
     @staticmethod
     async def verify_and_enable_2fa(db: AsyncSession, user: User, code: str) -> bool:
         if not user.totp_secret:
-            raise HTTPException(status_code=400, detail="2FA setup not initiated")
+            raise HTTPException(status_code=400, detail="Nie zainicjowano konfiguracji 2FA")
 
         totp = pyotp.TOTP(user.totp_secret)
         if not totp.verify(code):
@@ -100,25 +100,25 @@ class AuthService:
             )
             user_id: str = payload.get("sub")
         except JWTError:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Niepoprawny token")
 
         try:
             u_id = int(user_id)
         except (ValueError, TypeError):
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Niepoprawny token")
 
         result = await db.execute(select(User).where(User.id == u_id))
         user = result.scalars().first()
 
         if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise HTTPException(status_code=401, detail="Nie znaleziono użytkownika")
 
         if not user.is_2fa_enabled or not user.totp_secret:
-            raise HTTPException(status_code=400, detail="2FA not enabled for user")
+            raise HTTPException(status_code=400, detail="2FA nie jest włączone dla użytkownika")
 
         totp = pyotp.TOTP(user.totp_secret)
         if not totp.verify(code):
-            raise HTTPException(status_code=400, detail="Invalid code")
+            raise HTTPException(status_code=400, detail="Niepoprawny kod")
 
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         new_token = security.create_access_token(
@@ -138,7 +138,7 @@ class AuthService:
         Returns True if successful, raises HTTPException if old password is invalid.
         """
         if not security.verify_password(old_password, user.password_hash):
-            raise HTTPException(status_code=400, detail="Incorrect current password")
+            raise HTTPException(status_code=400, detail="Niepoprawne hasło")
         
         user.password_hash = security.get_password_hash(new_password)
         db.add(user)

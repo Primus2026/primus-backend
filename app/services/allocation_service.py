@@ -33,41 +33,49 @@ class AllocationService:
         product = result.scalars().first()
         
         if not product:
-            raise HTTPException(status_code=404, detail=f"Product with barcode {barcode} not found")
+            raise HTTPException(status_code=404, detail=f"Produkt o kodzie kreskowym {barcode} nie istnieje")
 
         # 2. Get all racks
         result = await db.execute(select(Rack))
         racks = result.scalars().all()
         
         if not racks:
-            raise HTTPException(status_code=400, detail="No racks defined in the warehouse")
+            raise HTTPException(status_code=400, detail="W magazynie nie ma zdefiniowanych regałów")
 
         # 3. Filter Racks (Physical Requirements)
         pre_candidate_racks = []
         for rack in racks:
-            # Temperature check (Product range must be within Rack range)
-            if not (rack.temp_min >= product.req_temp_min and rack.temp_max <= product.req_temp_max):
+            SAFE_BUFFER = 2.0 
+
+            overlap_min = max(rack.temp_min, product.req_temp_min)
+            overlap_max = min(rack.temp_max, product.req_temp_max)
+
+            if (overlap_max - overlap_min) < SAFE_BUFFER:
+                logger.info(f"Rack {rack.designation} temperature overlap too small or non-existent")
                 continue
                 
             # Dimensions check (Product fits in slot)
             if not (product.dims_x_mm <= rack.max_dims_x_mm and 
                     product.dims_y_mm <= rack.max_dims_y_mm and
                     product.dims_z_mm <= rack.max_dims_z_mm):
+                logger.info(f"Dimensions check failed for rack {rack.designation}")
                 continue
             
             # Single item weight check (Optimization: if item itself is heavier than rack limit)
             if product.weight_kg > rack.max_weight_kg:
+                logger.info(f"Weight check failed for rack {rack.designation}")
                 continue
 
             # Need to check for available slots? 
             # We will defer "is full" check to the slot finding step or optimize.
             pre_candidate_racks.append(rack)
-
+        print([r.designation for r in pre_candidate_racks])
         if not pre_candidate_racks:
-            raise HTTPException(status_code=400, detail="No suitable racks found meeting physical requirements")
+            raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych")
             
         # Bulk fetch current weights for pre-candidates
         candidate_ids = [r.id for r in pre_candidate_racks]
+        logger.info(f"Pre-candidate racks: {candidate_ids}")
         
         weight_stmt = (
             select(StockItem.rack_id, func.sum(ProductDefinition.weight_kg))
@@ -78,15 +86,20 @@ class AllocationService:
         weight_result = await db.execute(weight_stmt)
         # Map rack_id -> current_weight
         current_weights = {row[0]: row[1] or 0.0 for row in weight_result.all()}
+        logger.info(f"Current weights checks: {current_weights}")
         
         candidate_racks = []
         for rack in pre_candidate_racks:
             current_load = current_weights.get(rack.id, 0.0)
+            logger.info(f"Rack {rack.designation} (ID: {rack.id}): Load {current_load} + Item {product.weight_kg} <= Max {rack.max_weight_kg}")
             if current_load + product.weight_kg <= rack.max_weight_kg:
                 candidate_racks.append(rack)
+            else:
+                logger.warning(f"Rack {rack.designation} rejected by weight limit")
                 
         if not candidate_racks:
-             raise HTTPException(status_code=400, detail="No suitable racks found (weight limit reached)")
+             logger.error("No candidate racks found after weight check")
+             raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych (limit wagowy został osiągnięty)")
 
         # 4. Strategy Selection based on Frequency Class
         sorted_racks = []
@@ -190,7 +203,7 @@ class AllocationService:
                      col=col
                 )
                  
-        raise HTTPException(status_code=400, detail="No available space found in suitable racks")
+        raise HTTPException(status_code=400, detail="Nie znaleziono wolnego miejsca w odpowiednich regałach")
 
     @staticmethod 
     async def confirm_allocation(
@@ -202,17 +215,17 @@ class AllocationService:
         logger.info(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
         expected_change = await redis_client.get(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
         if expected_change is None:
-            raise HTTPException(status_code=400, detail="No expected change found for this rack location")
+            raise HTTPException(status_code=400, detail="Nie znaleziono oczekującej zmiany dla tej lokalizacji regału")
         
         try:
             change_data = json.loads(expected_change)
             cached_user_id = change_data.get("user_id")
             product_id = change_data.get("product_id")
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid lock data format")
+            raise HTTPException(status_code=400, detail="Niepoprawny typ danych w cachu")
 
         if cached_user_id != user.id:
-            raise HTTPException(status_code=400, detail="This rack location is not locked for this user")
+            raise HTTPException(status_code=400, detail="Ta lokalizacja regału nie jest zablokowana dla tego użytkownika")
     
         
         # update weight on rack in cache
@@ -225,7 +238,7 @@ class AllocationService:
         product_def = result_prod.scalar_one_or_none()
         
         if not product_def:
-             raise HTTPException(status_code=404, detail="Product from cache not found in DB")
+             raise HTTPException(status_code=404, detail="Nie znaleziono produktu w bazie")
 
         product_weight = product_def.weight_kg
 
@@ -281,7 +294,7 @@ class AllocationService:
             f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}"
         )
         if expectedChange is None:
-            raise HTTPException(status_code=400, detail="No expected change found for this rack location")
+            raise HTTPException(status_code=400, detail="Nie znaleziono oczekującej zmiany dla tej lokalizacji regału")
             
         try:
             change_data = json.loads(expectedChange)
@@ -304,10 +317,10 @@ class AllocationService:
              try:
                  cached_user_id = int(expectedChange)
              except:
-                 raise HTTPException(status_code=400, detail="Invalid lock data")
+                 raise HTTPException(status_code=400, detail="Niepoprawny typ danych w cachu")
 
         if cached_user_id != user.id:
-            raise HTTPException(status_code=400, detail="This rack location is not locked for this user")
+            raise HTTPException(status_code=400, detail="Ta lokalizacja regału nie jest zablokowana dla tego użytkownika")
         
         # Remove lock
         await redis_client.delete(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
