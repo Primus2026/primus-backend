@@ -17,6 +17,7 @@ class AlertService:
         if not alert:
             raise HTTPException(status_code=404, detail="Alert not found")
         alert.is_resolved = True
+        alert.is_sent = True
         await db.commit()
         return alert
 
