@@ -52,7 +52,8 @@ def generate_report(
         from app.tasks.report_tasks import generate_audit_report_task
         task = generate_audit_report_task.delay()
     elif report_type == ReportType.TEMP:
-        raise HTTPException(status_code=501, detail="Temperature report not implemented yet.")
+        from app.tasks.report_tasks import generate_temp_report_task
+        task = generate_temp_report_task.delay(rack_id=rack_id, barcode=barcode)
     else:
         raise HTTPException(status_code=400, detail="Invalid report type.")
     
@@ -98,15 +99,6 @@ def get_report_status(
 
     return response
 
-@router.get(
-    "/",
-    response_model=List[ReportResponse],
-    summary="List Reports",
-    responses={
-        200: {"description": "List of reports retrieved successfully"},
-        401: {"description": "Not authenticated"},
-    },
-)
 @router.get(
     "/",
     response_model=List[ReportResponse],

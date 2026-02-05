@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.product_definition import (
     ProductDefinitionIn,
     ProductDefinitionOut,
+    ProductDefinitionUpdate,
     ProductImportResult,
 )
 from app.database.models.product_definition import ProductDefinition
@@ -41,6 +42,25 @@ async def create_product_definition(
     return await ProductDefinitionService.create_product_definition(
         db=db,
         product_definition=product_definition,
+    )
+
+
+@router.put("/{product_definition_id}", response_model=ProductDefinitionOut)
+async def update_product_definition(
+    product_definition_id: int,
+    product_update: "ProductDefinitionUpdate",
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+):
+    """
+    Update a product definition.
+
+    Can only be executed by an admin user.
+    """
+    return await ProductDefinitionService.update_product_definition(
+        db=db,
+        product_definition_id=product_definition_id,
+        product_update=product_update,
     )
 
 

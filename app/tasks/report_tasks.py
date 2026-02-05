@@ -137,6 +137,57 @@ async def _process_audit_report_async(task_id: str):
 def process_audit_report(task_id: str):
     return run_async(_process_audit_report_async(task_id))
 
+async def _process_temp_report_async(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+    try:
+        async with SessionLocal() as db:
+            # 1. Query Data: Temp Alerts
+            from app.schemas.alert import AlertType
+            stmt = select(Alert).where(Alert.alert_type == AlertType.TEMP).order_by(Alert.created_at.desc())
+            
+            if rack_id:
+                stmt = stmt.where(Alert.rack_id == rack_id)
+            
+            # Note: Filtering alerts by barcode is tricky as Alert has product_id, not barcode directly.
+            # But we can join ProductDefinition.
+            if barcode:
+                stmt = stmt.join(Alert.product).where(ProductDefinition.barcode == barcode)
+            
+            stmt = stmt.options(
+                selectinload(Alert.rack),
+                selectinload(Alert.product)
+            )
+            
+            result = await db.execute(stmt)
+            alerts = result.scalars().all()
+
+            # 2. Determine Filename
+            timestamp = datetime.now().strftime("%Y%m%d")
+            filename = f"TEMP_{timestamp}_{task_id}.pdf"
+            
+            # 3. Generate PDF to Temp File
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                temp_path = Path(tmp.name)
+            
+            try:
+                ReportService.generate_temp_pdf(alerts, temp_path)
+                
+                # 4. Upload to Storage (Async)
+                async with aiofiles.open(temp_path, "rb") as f:
+                    content = await f.read()
+                    await ReportStorageService.save_report(filename, content)
+                
+            finally:
+                if temp_path.exists():
+                    os.remove(temp_path)
+
+            return {"filename": filename}
+    except Exception as e:
+        print(f"Error generating temp report: {e}")
+        raise e
+
+def process_temp_report(task_id: str, rack_id: int | None = None, barcode: str | None = None):
+    return run_async(_process_temp_report_async(task_id, rack_id, barcode))
+
 
 @celery_app.task(bind=True)
 def generate_expiry_report_task(self,rack_id: int | None = None, barcode: str | None = None):
@@ -155,6 +206,15 @@ def generate_audit_report_task(self):
     """
     task_id = self.request.id
     return process_audit_report(task_id)
+
+@celery_app.task(bind=True)
+def generate_temp_report_task(self, rack_id: int | None = None, barcode: str | None = None):
+    """
+    Background task to generate temperature report.
+    Returns: {"filename": "..."}
+    """
+    task_id = self.request.id
+    return process_temp_report(task_id, rack_id, barcode)
 
 @celery_app.task
 def cleanup_old_reports_task():
