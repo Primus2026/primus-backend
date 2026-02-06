@@ -1,0 +1,4990 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Primus 2026 Warehouse API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/stock/": {
+      "get": {
+        "tags": [
+          "Stock"
+        ],
+        "summary": "Get Grouped Stocks",
+        "operationId": "get_grouped_stocks_api_v1_stock__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "description": "Items per page",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Items per page"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by product name",
+              "title": "Name"
+            },
+            "description": "Filter by product name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductStockGroup"
+                  },
+                  "title": "Response Get Grouped Stocks Api V1 Stock  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/outbound/initiate/{barcode}": {
+      "post": {
+        "tags": [
+          "Stock Outbound"
+        ],
+        "summary": "Outbound Stock Item Initiate",
+        "description": "Inicjalizacja procesu wydania towaru (FIFO).\n\n**barcode**:\nKod kreskowy produktu do wydania.\n\nZwraca lokalizacj\u0119 towaru do zdj\u0119cia (zgodnie z zasad\u0105 FIFO).\nNast\u0119pnie nale\u017cy wywo\u0142a\u0107 /confirm.",
+        "operationId": "outbound_stock_item_initiate_api_v1_stock_outbound_initiate__barcode__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "barcode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Barcode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackLocation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stock item not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/outbound/confirm": {
+      "post": {
+        "tags": [
+          "Stock Outbound"
+        ],
+        "summary": "Outbound Stock Item Confirm",
+        "description": "Potwierdzenie wydania towaru.\n\n**rack_location**:\nLokalizacja towaru, kt\u00f3ry zosta\u0142 fizycznie zdj\u0119ty.\n\nUsuwa towar z stanu magazynowego.",
+        "operationId": "outbound_stock_item_confirm_api_v1_stock_outbound_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackLocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stock item not found"
+          },
+          "403": {
+            "description": "You are not authorized to confirm this outbound process"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stock/outbound/cancel": {
+      "post": {
+        "tags": [
+          "Stock Outbound"
+        ],
+        "summary": "Outbound Stock Item Cancel",
+        "description": "Anulowanie procesu wydania towaru.\n\n**rack_location**:\nLokalizacja towaru.\n\nZwalnia blokad\u0119 na towarze, przywracaj\u0105c go do dost\u0119pnej puli.",
+        "operationId": "outbound_stock_item_cancel_api_v1_stock_outbound_cancel_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackLocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stock/outbound/manual": {
+      "post": {
+        "tags": [
+          "Stock Outbound"
+        ],
+        "summary": "Outbound Stock Item Manual",
+        "description": "R\u0119czne wydanie towaru (Admin).\n\n**rack_location**:\nKonkretna lokalizacja towaru do usuni\u0119cia.\n\nPozwala na usuni\u0119cie dowolnego towaru z pomini\u0119ciem FIFO.",
+        "operationId": "outbound_stock_item_manual_api_v1_stock_outbound_manual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackLocationManual"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logowanie u\u017cytkownika",
+        "description": "Logowanie OAuth2 (pobranie tokena dost\u0119pu).\n\n- Je\u015bli u\u017cytkownik ma w\u0142\u0105czone 2FA, zwraca tymczasowy token z flag\u0105 `is_2fa_required=True`.\n- Je\u015bli 2FA jest wy\u0142\u0105czone, zwraca pe\u0142ny token dost\u0119pu.",
+        "operationId": "login_access_token_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_access_token_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Niepoprawny login lub has\u0142o"
+          },
+          "401": {
+            "description": "U\u017cytkownik nieaktywny"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/2fa/setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Konfiguracja 2FA",
+        "description": "Rozpocz\u0119cie konfiguracji 2FA dla zalogowanego u\u017cytkownika.\n\nGeneruje nowy sekret TOTP i zwraca:\n- **secret**: Surowy klucz sekretny.\n- **qr_code_url**: URL do generowania kodu QR (provisioning URI).\n- **qr_code_image**: Obraz kodu QR w formacie Base64.",
+        "operationId": "setup_2fa_api_v1_auth_2fa_setup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorSetupResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak autoryzacji"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/2fa/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Weryfikacja i w\u0142\u0105czenie 2FA",
+        "description": "Weryfikacja kodu w celu W\u0141\u0104CZENIA 2FA.\n\nWymaga podania poprawnego kodu z aplikacji uwierzytelniaj\u0105cej, \naby potwierdzi\u0107 konfiguracj\u0119 i aktywowa\u0107 2FA na koncie.",
+        "operationId": "verify_2fa_setup_api_v1_auth_2fa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Niepoprawny kod lub brak inicjalizacji 2FA"
+          },
+          "401": {
+            "description": "Brak autoryzacji"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/2fa/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logowanie 2FA (drugi etap)",
+        "description": "Doko\u0144czenie logowania kodem 2FA.\n\nWymaga:\n- **token**: Tymczasowy token dost\u0119pu otrzymany z endpointu `/login`.\n- **code**: Kod TOTP z aplikacji uwierzytelniaj\u0105cej.\n\nZwraca pe\u0142ny token dost\u0119pu (access token) w przypadku sukcesu.",
+        "operationId": "login_2fa_api_v1_auth_2fa_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Niepoprawny kod lub 2FA nieaktywne"
+          },
+          "401": {
+            "description": "Niepoprawny token lub u\u017cytkownik nie znaleziony"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Zmiana has\u0142a",
+        "description": "Zmiana has\u0142a zalogowanego u\u017cytkownika.\n\nWymaga:\n- **old_password**: Obecne has\u0142o do weryfikacji.\n- **new_password**: Nowe has\u0142o (min. 8 znak\u00f3w).\n- **confirm_password**: Potwierdzenie nowego has\u0142a (musi pasowa\u0107).",
+        "operationId": "change_password_api_v1_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Niepoprawne obecne has\u0142o"
+          },
+          "401": {
+            "description": "Brak autoryzacji"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/request_register": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Rejestracja nowego u\u017cytkownika",
+        "description": "Rejestracja wniosku o nowe konto.\n\nTworzy u\u017cytkownika ze statusem `is_active=False`. Wymaga akceptacji administratora.",
+        "operationId": "request_register_api_v1_users_request_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "U\u017cytkownik o takim loginie ju\u017c istnieje"
+          },
+          "500": {
+            "description": "B\u0142\u0105d serwera"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/create_admin": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Utworzenie domy\u015blnego administratora",
+        "description": "Utworzenie domy\u015blnego konta administratora.\n\nPomocniczy endpoint do inicjalizacji konta admina, je\u015bli nie istnieje.",
+        "operationId": "create_admin_api_v1_users_create_admin_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UserOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Create Admin Api V1 Users Create Admin Post"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "B\u0142\u0105d serwera"
+          }
+        }
+      }
+    },
+    "/api/v1/users/approve_user/{user_id}": {
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Approve user registration",
+        "description": "Zatwierdzenie oczekuj\u0105cej rejestracji.\n\nAktywuje konto u\u017cytkownika (`is_active=True`). Dost\u0119pne tylko dla administrator\u00f3w.",
+        "operationId": "approve_user_api_v1_users_approve_user__user_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "400": {
+            "description": "User already active"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/reject_user/{user_id}": {
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Reject user registration",
+        "description": "Odrzucenie oczekuj\u0105cej rejestracji.\n\nTrwale usuwa konto oczekuj\u0105ce na akceptacj\u0119. Dost\u0119pne tylko dla administrator\u00f3w.",
+        "operationId": "reject_user_api_v1_users_reject_user__user_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "400": {
+            "description": "User already active"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Pobranie danych obecnego u\u017cytkownika",
+        "description": "Zwraca szczeg\u00f3\u0142y zalogowanego u\u017cytkownika.\n\nPobiera informacje o aktualnie uwierzytelnionym u\u017cytkowniku.",
+        "operationId": "get_me_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/warehouse_workers": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Pobranie listy magazynier\u00f3w",
+        "operationId": "get_all_warehouse_workers_api_v1_users_warehouse_workers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get All Warehouse Workers Api V1 Users Warehouse Workers Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/requests": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Pobranie wniosk\u00f3w o rejestracj\u0119",
+        "operationId": "get_all_warehouse_workers_api_v1_users_requests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get All Warehouse Workers Api V1 Users Requests Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Delete a user",
+        "description": "Usuni\u0119cie konta u\u017cytkownika.\n\nDost\u0119pne tylko dla administrator\u00f3w. Nie mo\u017cna usun\u0105\u0107 konta administratora.",
+        "operationId": "delete_user_api_v1_users__user_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Msg"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cannot delete an administrator"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/racks/": {
+      "get": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Get All Racks",
+        "description": "Pobranie listy wszystkich rega\u0142\u00f3w.",
+        "operationId": "get_all_racks_api_v1_racks__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RackOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get All Racks Api V1 Racks  Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Create Rack",
+        "description": "Utworzenie nowego rega\u0142u.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "create_rack_api_v1_racks__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/racks/import": {
+      "post": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Import Racks",
+        "description": "Import rega\u0142\u00f3w z pliku CSV.\n\nPlik CSV powinien zawiera\u0107 definicje rega\u0142\u00f3w. Proces:\n- Walidacja formatu i zawarto\u015bci.\n- Sprawdzenie konflikt\u00f3w z istniej\u0105cymi towarami.\n- Tworzenie lub aktualizacja rega\u0142\u00f3w.\n\nProces jest asynchroniczny (Celery). Wynik mo\u017cna sprawdzi\u0107 endpointem GET /import/{task_id}.",
+        "operationId": "import_racks_api_v1_racks_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_racks_api_v1_racks_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackImportResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not enough permissions (Admin required)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/racks/import/{celery_task_id}": {
+      "get": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Get Import Result",
+        "description": "Pobranie wyniku procesu importu.\n\nS\u0142u\u017cy do odpytywania (polling) o status zadania importu zainicjowanego przez POST /import.",
+        "operationId": "get_import_result_api_v1_racks_import__celery_task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "celery_task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Celery Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackImportResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not enough permissions (Admin required)"
+          },
+          "404": {
+            "description": "Import task not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/racks/inventory-state": {
+      "get": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Get Racks Inventory State",
+        "description": "Pobranie wszystkich rega\u0142\u00f3w wraz z aktualnym stanem magazynowym (sloty, wagi).\nU\u017cywane przez MQTT Listener do inicjalizacji cache.",
+        "operationId": "get_racks_inventory_state_api_v1_racks_inventory_state_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RackWithInventory"
+                  },
+                  "type": "array",
+                  "title": "Response Get Racks Inventory State Api V1 Racks Inventory State Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/racks/{rack_id}/stock-items": {
+      "get": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Get Rack Stock Items",
+        "description": "Pobranie listy towar\u00f3w sk\u0142adowanych na konkretnym regale.",
+        "operationId": "get_rack_stock_items_api_v1_racks__rack_id__stock_items_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StockOut"
+                  },
+                  "title": "Response Get Rack Stock Items Api V1 Racks  Rack Id  Stock Items Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rack not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/racks/{rack_id}": {
+      "put": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Update Rack",
+        "description": "Aktualizacja istniej\u0105cego rega\u0142u.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "update_rack_api_v1_racks__rack_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rack not found"
+          },
+          "400": {
+            "description": "Rack with this designation already exists"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Delete Rack",
+        "description": "Usuni\u0119cie rega\u0142u.\n\nWymaga uprawnie\u0144 administratora.\nOperacja nie powiedzie si\u0119, je\u015bli rega\u0142 nie jest pusty.",
+        "operationId": "delete_rack_api_v1_racks__rack_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Rack not found"
+          },
+          "400": {
+            "description": "Rack is not empty"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Racks"
+        ],
+        "summary": "Get Rack",
+        "description": "Pobranie szczeg\u00f3\u0142\u00f3w rega\u0142u po ID.",
+        "operationId": "get_rack_api_v1_racks__rack_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RackOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rack not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/product_definitions/": {
+      "post": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Create Product Definition",
+        "description": "Utworzenie nowej definicji produktu.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "create_product_definition_api_v1_product_definitions__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductDefinitionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDefinitionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Get Product Definitions",
+        "description": "Pobranie listy wszystkich definicji produkt\u00f3w.",
+        "operationId": "get_product_definitions_api_v1_product_definitions__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductDefinitionOut"
+                  },
+                  "title": "Response Get Product Definitions Api V1 Product Definitions  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/product_definitions/{product_definition_id}": {
+      "put": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Update Product Definition",
+        "description": "Aktualizacja definicji produktu.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "update_product_definition_api_v1_product_definitions__product_definition_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Definition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductDefinitionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDefinitionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Get Product Definition",
+        "description": "Pobranie szczeg\u00f3\u0142\u00f3w produktu po ID.",
+        "operationId": "get_product_definition_api_v1_product_definitions__product_definition_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Definition Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDefinitionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Delete Product Definition",
+        "description": "Usuni\u0119cie definicji produktu i powi\u0105zanego zdj\u0119cia.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "delete_product_definition_api_v1_product_definitions__product_definition_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Definition Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/product_definitions/{product_definition_id}/upload_image": {
+      "post": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Upload Image",
+        "description": "Przes\u0142anie zdj\u0119cia dla definicji produktu.\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "upload_image_api_v1_product_definitions__product_definition_id__upload_image_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Definition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_image_api_v1_product_definitions__product_definition_id__upload_image_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/product_definitions/bulk-images": {
+      "post": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Bulk Upload Images",
+        "description": "Masowe przesy\u0142anie zdj\u0119\u0107 produkt\u00f3w.\nDopasowuje pliki do produkt\u00f3w po nazwie pliku. Przetwarzanie w tle.",
+        "operationId": "bulk_upload_images_api_v1_product_definitions_bulk_images_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_bulk_upload_images_api_v1_product_definitions_bulk_images_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/product_definitions/bulk-images/{task_id}": {
+      "get": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Get Bulk Upload Status",
+        "description": "Pobranie statusu zadania masowego przesy\u0142ania zdj\u0119\u0107.",
+        "operationId": "get_bulk_upload_status_api_v1_product_definitions_bulk_images__task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/product_definitions/import_csv": {
+      "post": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Import Product Definitions Csv",
+        "description": "Import definicji produkt\u00f3w z pliku CSV (Asynchroniczny).\n\nWymaga uprawnie\u0144 administratora.",
+        "operationId": "import_product_definitions_csv_api_v1_product_definitions_import_csv_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_product_definitions_csv_api_v1_product_definitions_import_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/product_definitions/import_csv/{task_id}": {
+      "get": {
+        "tags": [
+          "Product Definitions"
+        ],
+        "summary": "Get Import Result",
+        "description": "Pobranie statusu zadania importu produkt\u00f3w.",
+        "operationId": "get_import_result_api_v1_product_definitions_import_csv__task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/generate/{report_type}": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Rozpocznij generowanie raportu",
+        "description": "Uruchomienie generowania raportu.\nZwraca identyfikator zadania (task_id) do \u015bledzenia post\u0119pu.\n\n**report_type**:\n- **expiry**: Raport dat wa\u017cno\u015bci.\n- **audit**: Pe\u0142ny raport inwentaryzacyjny.\n- **temp**: Raport temperatur (planowane).\n\nOpcjonalne filtry (tylko dla raport\u00f3w expiry i temp):\n- **rack_id**: Filtrowanie po konkretnym regale.\n- **barcode**: Filtrowanie po kodzie kreskowym produktu.",
+        "operationId": "generate_report_api_v1_reports_generate__report_type__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ReportType"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReportFilter"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Filters"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Generowanie raportu rozpocz\u0119te pomy\u015blnie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportGenerateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak autoryzacji"
+          },
+          "400": {
+            "description": "Niepoprawny typ raportu"
+          },
+          "501": {
+            "description": "Raport temperatur nie zaimplementowany"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/status/{task_id}": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Check Report Status",
+        "description": "Sprawdzenie statusu zadania generowania raportu.",
+        "operationId": "get_report_status_api_v1_reports_status__task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Task not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "List Reports",
+        "description": "Lista dost\u0119pnych wygenerowanych raport\u00f3w.",
+        "operationId": "list_reports_api_v1_reports__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "type_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type Filter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of reports retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportResponse"
+                  },
+                  "title": "Response List Reports Api V1 Reports  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/download/{filename}": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Download Report",
+        "description": "Pobranie konkretnego pliku raportu.",
+        "operationId": "download_report_api_v1_reports_download__filename__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File stream",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Report not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/inbound/": {
+      "post": {
+        "tags": [
+          "Stock Inbound"
+        ],
+        "summary": "Allocate Item",
+        "description": "Inicjalizacja procesu alokacji towaru.\n\nWeryfikuje kod kreskowy, znajduje najlepsze miejsce na regale i rezerwuje je tymczasowo.",
+        "operationId": "allocate_item_api_v1_stock_inbound__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stock/inbound/confirm": {
+      "post": {
+        "tags": [
+          "Stock Inbound"
+        ],
+        "summary": "Confirm Allocation",
+        "description": "Potwierdzenie alokacji (fizyczne od\u0142o\u017cenie towaru).\n\nFinalizuje proces, zapisuj\u0105c towar w bazie danych i zwalniaj\u0105c tymczasow\u0105 rezerwacj\u0119.",
+        "operationId": "confirm_allocation_api_v1_stock_inbound_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackLocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stock/inbound/cancel": {
+      "post": {
+        "tags": [
+          "Stock Inbound"
+        ],
+        "summary": "Cancel Allocation",
+        "description": "Anulowanie alokacji.\n\nZwalnia tymczasow\u0105 rezerwacj\u0119 miejsca na regale.",
+        "operationId": "cancel_allocation_api_v1_stock_inbound_cancel_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RackLocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/recognize": {
+      "post": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Rozpoznaj produkt ze zdj\u0119cia",
+        "description": "Rozpoznanie produktu na podstawie przes\u0142anego zdj\u0119cia.\n\nEndpoint przyjmuje plik obrazu, zapisuje go bezpiecznie i koleikuie zadanie w tle\ndo wykonania rozpoznawania obiektu przy u\u017cyciu skonfigurowanego modelu AI.\n\nZwraca ID zadania, kt\u00f3re mo\u017cna odpytywa\u0107 o status i wyniki.",
+        "operationId": "recognize_product_api_v1_ai_recognize_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_recognize_product_api_v1_ai_recognize_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Plik musi by\u0107 obrazem"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/feedback": {
+      "post": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Prze\u015blij feedback do treningu AI",
+        "description": "Przes\u0142anie zdj\u0119cia feedbackowego dla konkretnego produktu.\n\nUmo\u017cliwia zalogowanym u\u017cytkownikom przes\u0142anie poprawnych zdj\u0119\u0107 dla danego ID produktu.\nZdj\u0119cia te s\u0105 przechowywane i wykorzystywane do przysz\u0142ego douczania modelu.",
+        "operationId": "submit_feedback_api_v1_ai_feedback_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_feedback_api_v1_ai_feedback_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Plik musi by\u0107 obrazem"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/retrain": {
+      "get": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Dotrenuj model AI",
+        "description": "Uruchomienie procesu dotrenowania modelu AI.\n\nInicjuje zadanie w tle (Celery), kt\u00f3re dotrenowuje model u\u017cywaj\u0105c\nzgromadzonych danych feedbackowych i treningowych. Operacja tylko dla Administratora.",
+        "operationId": "retrain_model_api_v1_ai_retrain_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRequestResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/model/reset": {
+      "post": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Zresetuj model AI",
+        "description": "Reset modelu AI.\n\nUsuwa zcache'owane pliki modelu i restartuje serwis. U\u017cywane np. przy zmianie sprz\u0119tu (CPU/GPU)\nwymuszaj\u0105c ponowne pobranie/inicjalizacj\u0119 modelu.",
+        "operationId": "reset_model_api_v1_ai_model_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/training-data/{product_id}": {
+      "post": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Prze\u015blij dane treningowe",
+        "description": "Masowe przesy\u0142anie danych treningowych dla produktu.\n\nUmo\u017cliwia administratorom przes\u0142anie wielu zdj\u0119\u0107 treningowych dla konkretnego produktu na raz.\nZdj\u0119cia s\u0105 dodawane do zbioru danych do retreningu. Operacja tylko dla Administratora.",
+        "operationId": "post_training_data_api_v1_ai_training_data__product_id__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_training_data_api_v1_ai_training_data__product_id__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/task-status/{task_id}": {
+      "get": {
+        "tags": [
+          "AI Recognition"
+        ],
+        "summary": "Pobierz status zadania",
+        "description": "Sprawdzenie statusu zadania w tle.\n\nPobiera obecny stan (PENDING, STARTED, SUCCESS, FAILURE) oraz wynik\nkonkretnego zadania Celery (np. treningu lub predykcji) na podstawie ID.",
+        "operationId": "get_task_status_api_v1_ai_task_status__task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Zadanie nie znalezione"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Create Alert",
+        "operationId": "create_alert_api_v1_alerts__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get Alerts",
+        "description": "Pobranie wszystkich alert\u00f3w z opcjonalnym filtrowaniem.",
+        "operationId": "get_alerts_api_v1_alerts__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "is_resolved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Resolved"
+            }
+          },
+          {
+            "name": "is_sent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Sent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response Get Alerts Api V1 Alerts  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{alert_id}/resolve": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Resolve Alert",
+        "description": "Rozwi\u0105zanie alertu (oznaczenie jako obs\u0142u\u017cony).",
+        "operationId": "resolve_alert_api_v1_alerts__alert_id__resolve_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Alert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/unsent": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get Unsent Alerts",
+        "description": "Pobranie wszystkich niewys\u0142anych alert\u00f3w.",
+        "operationId": "get_unsent_alerts_api_v1_alerts_unsent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Unsent Alerts Api V1 Alerts Unsent Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/alerts/mark-as-read": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Mark Alerts As Read",
+        "description": "Oznaczenie listy alert\u00f3w jako przeczytane.",
+        "operationId": "mark_alerts_as_read_api_v1_alerts_mark_as_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array",
+                "title": "Alert Ids"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "type": "array",
+                  "title": "Response Mark Alerts As Read Api V1 Alerts Mark As Read Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/voice-command/": {
+      "post": {
+        "tags": [
+          "Voice Command"
+        ],
+        "summary": "Process Voice Command",
+        "description": "Przetworzenie komendy g\u0142osowej przez Ollama (Qwen2.5) i wykonanie wykrytej intencji.",
+        "operationId": "process_voice_command_api_v1_voice_command__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Process Voice Command Api V1 Voice Command  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "List Backups",
+        "description": "Pobranie listy dost\u0119pnych backup\u00f3w w magazynie.",
+        "operationId": "list_backups_api_v1_backups__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Backups Api V1 Backups  Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Create Backup",
+        "description": "Uruchomienie backupu na \u017c\u0105danie (Asynchroniczne zadanie w tle).",
+        "operationId": "create_backup_api_v1_backups__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Backup Api V1 Backups  Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/backups/status/{task_id}": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Get Backup Status",
+        "description": "Pobranie statusu zadania backupu/przywracania.",
+        "operationId": "get_backup_status_api_v1_backups_status__task_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Backup Status Api V1 Backups Status  Task Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{filename}/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restore Backup",
+        "description": "Przywr\u00f3cenie kopii zapasowej z pliku (Asynchroniczne zadanie w tle).\nUWAGA: Ta operacja nadpisze obecne dane w bazie.",
+        "operationId": "restore_backup_api_v1_backups__filename__restore_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Restore Backup Api V1 Backups  Filename  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Read Root",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertCreate": {
+        "properties": {
+          "alert_type": {
+            "$ref": "#/components/schemas/AlertType"
+          },
+          "rack_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rack Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "last_valid_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Valid Weight"
+          },
+          "position_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Row"
+          },
+          "position_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Col"
+          },
+          "is_resolved": {
+            "type": "boolean",
+            "title": "Is Resolved",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "alert_type",
+          "message"
+        ],
+        "title": "AlertCreate"
+      },
+      "AlertOut": {
+        "properties": {
+          "alert_type": {
+            "$ref": "#/components/schemas/AlertType"
+          },
+          "rack_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rack Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "last_valid_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Valid Weight"
+          },
+          "position_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Row"
+          },
+          "position_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Col"
+          },
+          "is_resolved": {
+            "type": "boolean",
+            "title": "Is Resolved",
+            "default": false
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "is_sent": {
+            "type": "boolean",
+            "title": "Is Sent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alert_type",
+          "message",
+          "id",
+          "created_at",
+          "is_sent"
+        ],
+        "title": "AlertOut"
+      },
+      "AlertType": {
+        "type": "string",
+        "enum": [
+          "TEMP",
+          "WEIGHT",
+          "EXPIRY",
+          "EXPIRY_WARNING"
+        ],
+        "title": "AlertType"
+      },
+      "AllocationRequest": {
+        "properties": {
+          "barcode": {
+            "type": "string",
+            "title": "Barcode",
+            "description": "Kod kreskowy produktu do alokacji"
+          }
+        },
+        "type": "object",
+        "required": [
+          "barcode"
+        ],
+        "title": "AllocationRequest"
+      },
+      "AllocationResponse": {
+        "properties": {
+          "rack_id": {
+            "type": "integer",
+            "title": "Rack Id"
+          },
+          "rack_designation": {
+            "type": "string",
+            "title": "Rack Designation"
+          },
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "col": {
+            "type": "integer",
+            "title": "Col"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rack_id",
+          "rack_designation",
+          "row",
+          "col"
+        ],
+        "title": "AllocationResponse"
+      },
+      "Body_bulk_upload_images_api_v1_product_definitions_bulk_images_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_bulk_upload_images_api_v1_product_definitions_bulk_images_post"
+      },
+      "Body_import_product_definitions_csv_api_v1_product_definitions_import_csv_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_product_definitions_csv_api_v1_product_definitions_import_csv_post"
+      },
+      "Body_import_racks_api_v1_racks_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_racks_api_v1_racks_import_post"
+      },
+      "Body_login_access_token_api_v1_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "password"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_access_token_api_v1_auth_login_post"
+      },
+      "Body_post_training_data_api_v1_ai_training_data__product_id__post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_post_training_data_api_v1_ai_training_data__product_id__post"
+      },
+      "Body_recognize_product_api_v1_ai_recognize_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_recognize_product_api_v1_ai_recognize_post"
+      },
+      "Body_submit_feedback_api_v1_ai_feedback_post": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "file"
+        ],
+        "title": "Body_submit_feedback_api_v1_ai_feedback_post"
+      },
+      "Body_upload_image_api_v1_product_definitions__product_definition_id__upload_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_image_api_v1_product_definitions__product_definition_id__upload_image_post"
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Czy operacja zako\u0144czy\u0142a si\u0119 sukcesem"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Komunikat opisuj\u0105cy wynik operacji"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "FeedbackResponse",
+        "example": {
+          "message": "Feedback saved successfully",
+          "success": true
+        }
+      },
+      "FrequencyClass": {
+        "type": "string",
+        "enum": [
+          "A",
+          "B",
+          "C"
+        ],
+        "title": "FrequencyClass"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Msg": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "Msg"
+      },
+      "PasswordChangeRequest": {
+        "properties": {
+          "old_password": {
+            "type": "string",
+            "title": "Old Password",
+            "description": "Obecne aktywne has\u0142o"
+          },
+          "new_password": {
+            "type": "string",
+            "title": "New Password",
+            "description": "Nowe has\u0142o (min 8 znak\u00f3w)"
+          },
+          "confirm_password": {
+            "type": "string",
+            "title": "Confirm Password",
+            "description": "Powt\u00f3rz nowe has\u0142o dla potwierdzenia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "old_password",
+          "new_password",
+          "confirm_password"
+        ],
+        "title": "PasswordChangeRequest",
+        "example": {
+          "confirm_password": "newSecretPassword456",
+          "new_password": "newSecretPassword456",
+          "old_password": "oldSecretPassword123"
+        }
+      },
+      "ProductDefinitionIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Nazwa produktu/asortymentu"
+          },
+          "barcode": {
+            "type": "string",
+            "title": "Barcode",
+            "description": "Unikalny kod kreskowy lub identyfikator QR"
+          },
+          "req_temp_min": {
+            "type": "number",
+            "title": "Req Temp Min",
+            "description": "Minimalna wymagana temperatura przechowywania (\u00b0C)"
+          },
+          "req_temp_max": {
+            "type": "number",
+            "title": "Req Temp Max",
+            "description": "Maksymalna wymagana temperatura przechowywania (\u00b0C)"
+          },
+          "weight_kg": {
+            "type": "number",
+            "title": "Weight Kg",
+            "description": "Waga jednostkowa (kg)"
+          },
+          "dims_x_mm": {
+            "type": "integer",
+            "title": "Dims X Mm",
+            "description": "Szeroko\u015b\u0107 (mm)"
+          },
+          "dims_y_mm": {
+            "type": "integer",
+            "title": "Dims Y Mm",
+            "description": "Wysoko\u015b\u0107 (mm)"
+          },
+          "dims_z_mm": {
+            "type": "integer",
+            "title": "Dims Z Mm",
+            "description": "G\u0142\u0119boko\u015b\u0107 (mm)"
+          },
+          "is_dangerous": {
+            "type": "boolean",
+            "title": "Is Dangerous",
+            "description": "Czy przedmiot jest niebezpieczny/szkodliwy"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "description": "Dodatkowe uwagi lub instrukcje obs\u0142ugi"
+          },
+          "expiry_days": {
+            "type": "integer",
+            "title": "Expiry Days",
+            "description": "Okres przydatno\u015bci w dniach od przyj\u0119cia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "barcode",
+          "req_temp_min",
+          "req_temp_max",
+          "weight_kg",
+          "dims_x_mm",
+          "dims_y_mm",
+          "dims_z_mm",
+          "is_dangerous",
+          "comment",
+          "expiry_days"
+        ],
+        "title": "ProductDefinitionIn",
+        "example": {
+          "barcode": "1234567890123",
+          "comment": "Fragile item",
+          "dims_x_mm": 100,
+          "dims_y_mm": 50,
+          "dims_z_mm": 50,
+          "expiry_days": 365,
+          "is_dangerous": false,
+          "name": "Standard Widget",
+          "req_temp_max": 25.0,
+          "req_temp_min": 5.0,
+          "weight_kg": 1.5
+        }
+      },
+      "ProductDefinitionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "barcode": {
+            "type": "string",
+            "title": "Barcode"
+          },
+          "photo_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Path"
+          },
+          "req_temp_min": {
+            "type": "number",
+            "title": "Req Temp Min"
+          },
+          "req_temp_max": {
+            "type": "number",
+            "title": "Req Temp Max"
+          },
+          "weight_kg": {
+            "type": "number",
+            "title": "Weight Kg"
+          },
+          "dims_x_mm": {
+            "type": "integer",
+            "title": "Dims X Mm"
+          },
+          "dims_y_mm": {
+            "type": "integer",
+            "title": "Dims Y Mm"
+          },
+          "dims_z_mm": {
+            "type": "integer",
+            "title": "Dims Z Mm"
+          },
+          "is_dangerous": {
+            "type": "boolean",
+            "title": "Is Dangerous"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "expiry_days": {
+            "type": "integer",
+            "title": "Expiry Days"
+          },
+          "frequency_class": {
+            "$ref": "#/components/schemas/FrequencyClass"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "barcode",
+          "req_temp_min",
+          "req_temp_max",
+          "weight_kg",
+          "dims_x_mm",
+          "dims_y_mm",
+          "dims_z_mm",
+          "is_dangerous",
+          "expiry_days",
+          "frequency_class"
+        ],
+        "title": "ProductDefinitionOut"
+      },
+      "ProductDefinitionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "req_temp_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Req Temp Min"
+          },
+          "req_temp_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Req Temp Max"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "dims_x_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dims X Mm"
+          },
+          "dims_y_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dims Y Mm"
+          },
+          "dims_z_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dims Z Mm"
+          },
+          "is_dangerous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Dangerous"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "expiry_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiry Days"
+          },
+          "frequency_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrequencyClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ProductDefinitionUpdate"
+      },
+      "ProductImportResult": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Komunikat wyniku"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductImportSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Statystyki importu"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Status zadania (np. SUCCESS, FAILURE)"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Og\u00f3lny komunikat b\u0142\u0119du"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "ID zadania Celery"
+          }
+        },
+        "type": "object",
+        "title": "ProductImportResult"
+      },
+      "ProductImportSummary": {
+        "properties": {
+          "total_processed": {
+            "type": "integer",
+            "title": "Total Processed",
+            "description": "Ca\u0142kowita liczba przetworzonych wierszy",
+            "default": 0
+          },
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count",
+            "description": "Liczba utworzonych wierszy",
+            "default": 0
+          },
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count",
+            "description": "Liczba zaktualizowanych wierszy",
+            "default": 0
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count",
+            "description": "Liczba pomini\u0119tych wierszy",
+            "default": 0
+          },
+          "skipped_details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Skipped Details",
+            "description": "Szczeg\u00f3\u0142y pomini\u0119tych wierszy",
+            "default": []
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count",
+            "description": "Liczba pomy\u015blnie zaimportowanych (Legacy)",
+            "default": 0
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "description": "Liczba b\u0142\u0119dnych (Legacy)",
+            "default": 0
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "Lista komunikat\u00f3w b\u0142\u0119d\u00f3w",
+            "default": []
+          },
+          "successes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Successes",
+            "description": "Szczeg\u00f3\u0142y udanych import\u00f3w",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProductImportSummary"
+      },
+      "ProductStockGroup": {
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/ProductDefinitionOut"
+          },
+          "stock_items": {
+            "items": {
+              "$ref": "#/components/schemas/StockItemSimpleOut"
+            },
+            "type": "array",
+            "title": "Stock Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product",
+          "stock_items"
+        ],
+        "title": "ProductStockGroup"
+      },
+      "RackCreate": {
+        "properties": {
+          "designation": {
+            "type": "string",
+            "title": "Designation",
+            "description": "Unikalny kod/oznaczenie rega\u0142u (np. R-01)"
+          },
+          "rows_m": {
+            "type": "integer",
+            "title": "Rows M",
+            "description": "Liczba rz\u0119d\u00f3w (poziom\u00f3w wysoko\u015bci)"
+          },
+          "cols_n": {
+            "type": "integer",
+            "title": "Cols N",
+            "description": "Liczba kolumn (slot\u00f3w na poziom)"
+          },
+          "temp_min": {
+            "type": "number",
+            "title": "Temp Min",
+            "description": "Minimalna dopuszczalna temperatura (\u00b0C)"
+          },
+          "temp_max": {
+            "type": "number",
+            "title": "Temp Max",
+            "description": "Maksymalna dopuszczalna temperatura (\u00b0C)"
+          },
+          "max_weight_kg": {
+            "type": "number",
+            "title": "Max Weight Kg",
+            "description": "Maksymalna no\u015bno\u015b\u0107 (kg)"
+          },
+          "max_dims_x_mm": {
+            "type": "integer",
+            "title": "Max Dims X Mm",
+            "description": "Maksymalna szeroko\u015b\u0107 przedmiotu (mm)"
+          },
+          "max_dims_y_mm": {
+            "type": "integer",
+            "title": "Max Dims Y Mm",
+            "description": "Maksymalna wysoko\u015b\u0107 przedmiotu (mm)"
+          },
+          "max_dims_z_mm": {
+            "type": "integer",
+            "title": "Max Dims Z Mm",
+            "description": "Maksymalna g\u0142\u0119boko\u015b\u0107 przedmiotu (mm)"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment",
+            "description": "Opcjonalny opis lub uwagi"
+          },
+          "distance_from_exit_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance From Exit M",
+            "description": "Odleg\u0142o\u015b\u0107 od g\u0142\u00f3wnego wyj\u015bcia (metry)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "designation",
+          "rows_m",
+          "cols_n",
+          "temp_min",
+          "temp_max",
+          "max_weight_kg",
+          "max_dims_x_mm",
+          "max_dims_y_mm",
+          "max_dims_z_mm"
+        ],
+        "title": "RackCreate",
+        "example": {
+          "cols_n": 10,
+          "comment": "Main storage rack",
+          "designation": "R-101",
+          "distance_from_exit_m": 15.5,
+          "max_dims_x_mm": 1000,
+          "max_dims_y_mm": 500,
+          "max_dims_z_mm": 500,
+          "max_weight_kg": 500.0,
+          "rows_m": 5,
+          "temp_max": 25.0,
+          "temp_min": 18.0
+        }
+      },
+      "RackImportResult": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Komunikat wyniku"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RackImportSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Statystyki importu"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Status zadania"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Komunikat b\u0142\u0119du je\u015bli wyst\u0105pi\u0142"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "ID zadania Celery"
+          }
+        },
+        "type": "object",
+        "title": "RackImportResult"
+      },
+      "RackImportSummary": {
+        "properties": {
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count",
+            "description": "Liczba nowo utworzonych rega\u0142\u00f3w",
+            "default": 0
+          },
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count",
+            "description": "Liczba zaktualizowanych istniej\u0105cych rega\u0142\u00f3w",
+            "default": 0
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count",
+            "description": "Liczba pomini\u0119tych wierszy",
+            "default": 0
+          },
+          "skipped_details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Details",
+            "description": "Szczeg\u00f3\u0142y pomini\u0119tych wierszy",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "RackImportSummary"
+      },
+      "RackLocation": {
+        "properties": {
+          "designation": {
+            "type": "string",
+            "title": "Designation",
+            "description": "Oznaczenie rega\u0142u"
+          },
+          "row": {
+            "type": "integer",
+            "title": "Row",
+            "description": "Rz\u0105d pozycji (wysoko\u015b\u0107)"
+          },
+          "col": {
+            "type": "integer",
+            "title": "Col",
+            "description": "Kolumna pozycji"
+          }
+        },
+        "type": "object",
+        "required": [
+          "designation",
+          "row",
+          "col"
+        ],
+        "title": "RackLocation"
+      },
+      "RackLocationManual": {
+        "properties": {
+          "rack_id": {
+            "type": "integer",
+            "title": "Rack Id",
+            "description": "ID rega\u0142u"
+          },
+          "row": {
+            "type": "integer",
+            "title": "Row",
+            "description": "Rz\u0105d pozycji"
+          },
+          "col": {
+            "type": "integer",
+            "title": "Col",
+            "description": "Kolumna pozycji"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rack_id",
+          "row",
+          "col"
+        ],
+        "title": "RackLocationManual"
+      },
+      "RackOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "designation": {
+            "type": "string",
+            "title": "Designation"
+          },
+          "rows_m": {
+            "type": "integer",
+            "title": "Rows M"
+          },
+          "cols_n": {
+            "type": "integer",
+            "title": "Cols N"
+          },
+          "temp_min": {
+            "type": "number",
+            "title": "Temp Min"
+          },
+          "temp_max": {
+            "type": "number",
+            "title": "Temp Max"
+          },
+          "max_weight_kg": {
+            "type": "number",
+            "title": "Max Weight Kg"
+          },
+          "max_dims_x_mm": {
+            "type": "integer",
+            "title": "Max Dims X Mm"
+          },
+          "max_dims_y_mm": {
+            "type": "integer",
+            "title": "Max Dims Y Mm"
+          },
+          "max_dims_z_mm": {
+            "type": "integer",
+            "title": "Max Dims Z Mm"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "distance_from_exit_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance From Exit M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "designation",
+          "rows_m",
+          "cols_n",
+          "temp_min",
+          "temp_max",
+          "max_weight_kg",
+          "max_dims_x_mm",
+          "max_dims_y_mm",
+          "max_dims_z_mm"
+        ],
+        "title": "RackOut"
+      },
+      "RackSlotWeight": {
+        "properties": {
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "col": {
+            "type": "integer",
+            "title": "Col"
+          },
+          "current_weight": {
+            "type": "number",
+            "title": "Current Weight"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row",
+          "col",
+          "current_weight"
+        ],
+        "title": "RackSlotWeight"
+      },
+      "RackUpdate": {
+        "properties": {
+          "designation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Designation"
+          },
+          "rows_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows M"
+          },
+          "cols_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cols N"
+          },
+          "temp_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Min"
+          },
+          "temp_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Max"
+          },
+          "max_weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Weight Kg"
+          },
+          "max_dims_x_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dims X Mm"
+          },
+          "max_dims_y_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dims Y Mm"
+          },
+          "max_dims_z_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dims Z Mm"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "distance_from_exit_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance From Exit M"
+          }
+        },
+        "type": "object",
+        "title": "RackUpdate"
+      },
+      "RackWithInventory": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "designation": {
+            "type": "string",
+            "title": "Designation"
+          },
+          "rows_m": {
+            "type": "integer",
+            "title": "Rows M"
+          },
+          "cols_n": {
+            "type": "integer",
+            "title": "Cols N"
+          },
+          "temp_min": {
+            "type": "number",
+            "title": "Temp Min"
+          },
+          "temp_max": {
+            "type": "number",
+            "title": "Temp Max"
+          },
+          "max_weight_kg": {
+            "type": "number",
+            "title": "Max Weight Kg"
+          },
+          "max_dims_x_mm": {
+            "type": "integer",
+            "title": "Max Dims X Mm"
+          },
+          "max_dims_y_mm": {
+            "type": "integer",
+            "title": "Max Dims Y Mm"
+          },
+          "max_dims_z_mm": {
+            "type": "integer",
+            "title": "Max Dims Z Mm"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "distance_from_exit_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance From Exit M"
+          },
+          "active_slots": {
+            "items": {
+              "$ref": "#/components/schemas/RackSlotWeight"
+            },
+            "type": "array",
+            "title": "Active Slots",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "designation",
+          "rows_m",
+          "cols_n",
+          "temp_min",
+          "temp_max",
+          "max_weight_kg",
+          "max_dims_x_mm",
+          "max_dims_y_mm",
+          "max_dims_z_mm"
+        ],
+        "title": "RackWithInventory"
+      },
+      "RecognitionResult": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id",
+            "description": "Unikalny identyfikator rozpoznanego produktu"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Poziom pewno\u015bci rozpoznania (0.0 do 1.0)"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Nazwa rozpoznanego produktu"
+          },
+          "barcode": {
+            "type": "string",
+            "title": "Barcode",
+            "description": "Kod kreskowy rozpoznanego produktu"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "confidence",
+          "name",
+          "barcode"
+        ],
+        "title": "RecognitionResult",
+        "example": {
+          "barcode": "1234567890123",
+          "confidence": 0.98,
+          "name": "Milk 3.2%",
+          "product_id": 101
+        }
+      },
+      "ReportFilter": {
+        "properties": {
+          "rack_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rack Id",
+            "description": "Filtruj przedmioty po konkretnym ID rega\u0142u (opcjonalne)"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode",
+            "description": "Filtruj przedmioty po kodzie kreskowym produktu (opcjonalne)"
+          }
+        },
+        "type": "object",
+        "title": "ReportFilter",
+        "description": "Optional filters for report generation.",
+        "example": {
+          "barcode": "5901234567890",
+          "rack_id": 1
+        }
+      },
+      "ReportGenerateResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "message"
+        ],
+        "title": "ReportGenerateResponse",
+        "description": "Response model for triggering a report generation."
+      },
+      "ReportResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "created_at",
+          "size_bytes"
+        ],
+        "title": "ReportResponse",
+        "description": "Response model for a single report file."
+      },
+      "ReportStatusResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "ReportStatusResponse",
+        "description": "Response model for the status of a report generation task."
+      },
+      "ReportType": {
+        "type": "string",
+        "enum": [
+          "expiry",
+          "audit",
+          "temp"
+        ],
+        "title": "ReportType"
+      },
+      "StockItemSimpleOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "rack_id": {
+            "type": "integer",
+            "title": "Rack Id"
+          },
+          "position_row": {
+            "type": "integer",
+            "title": "Position Row"
+          },
+          "position_col": {
+            "type": "integer",
+            "title": "Position Col"
+          },
+          "entry_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Entry Date"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Expiry Date"
+          },
+          "received_by": {
+            "$ref": "#/components/schemas/UserReceiverOut"
+          },
+          "rack": {
+            "$ref": "#/components/schemas/RackOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "rack_id",
+          "position_row",
+          "position_col",
+          "entry_date",
+          "expiry_date",
+          "received_by",
+          "rack"
+        ],
+        "title": "StockItemSimpleOut"
+      },
+      "StockOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ProductDefinitionOut"
+          },
+          "rack_id": {
+            "type": "integer",
+            "title": "Rack Id"
+          },
+          "position_row": {
+            "type": "integer",
+            "title": "Position Row"
+          },
+          "position_col": {
+            "type": "integer",
+            "title": "Position Col"
+          },
+          "entry_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Entry Date"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Expiry Date"
+          },
+          "received_by": {
+            "$ref": "#/components/schemas/UserReceiverOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product",
+          "rack_id",
+          "position_row",
+          "position_col",
+          "entry_date",
+          "expiry_date",
+          "received_by"
+        ],
+        "title": "StockOut"
+      },
+      "TaskRequestResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "Unikalny identyfikator zadania w tle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "TaskRequestResponse"
+      },
+      "TaskStatusResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "Unikalny identyfikator zadania w tle"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Obecny status zadania (PENDING, STARTED, SUCCESS, FAILURE)"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecognitionResult"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result",
+            "description": "Wynik zadania je\u015bli zako\u0144czone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "TaskStatusResponse",
+        "example": {
+          "result": {
+            "confidence": 0.98,
+            "name": "Milk 3.2%",
+            "product_id": 101
+          },
+          "status": "SUCCESS",
+          "task_id": "c2013-1234-5678"
+        }
+      },
+      "Token": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "Token dost\u0119pu JWT"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "description": "Typ tokena, np. 'bearer'"
+          },
+          "is_2fa_required": {
+            "type": "boolean",
+            "title": "Is 2Fa Required",
+            "description": "Czy wymagana jest weryfikacja 2FA",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "token_type"
+        ],
+        "title": "Token"
+      },
+      "TwoFactorLoginRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "code"
+        ],
+        "title": "TwoFactorLoginRequest"
+      },
+      "TwoFactorSetupResponse": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "title": "Secret"
+          },
+          "qr_code_url": {
+            "type": "string",
+            "title": "Qr Code Url"
+          },
+          "qr_code_image": {
+            "type": "string",
+            "title": "Qr Code Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "secret",
+          "qr_code_url",
+          "qr_code_image"
+        ],
+        "title": "TwoFactorSetupResponse"
+      },
+      "TwoFactorVerifyRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "TwoFactorVerifyRequest"
+      },
+      "UserIn": {
+        "properties": {
+          "login": {
+            "type": "string",
+            "title": "Login",
+            "description": "Unikalna nazwa u\u017cytkownika"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Unikalny adres email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Silne has\u0142o"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login",
+          "email",
+          "password"
+        ],
+        "title": "UserIn",
+        "example": {
+          "email": "newuser@example.com",
+          "login": "newuser",
+          "password": "strongpassword123"
+        }
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "login": {
+            "type": "string",
+            "title": "Login"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "is_2fa_enabled": {
+            "type": "boolean",
+            "title": "Is 2Fa Enabled"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "login",
+          "email",
+          "role",
+          "is_2fa_enabled",
+          "is_active"
+        ],
+        "title": "UserOut"
+      },
+      "UserReceiverOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "UserReceiverOut"
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "ADMIN",
+          "WAREHOUSEMAN"
+        ],
+        "title": "UserRole"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VoiceCommandRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "VoiceCommandRequest"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/auth/login"
+          }
+        }
+      }
+    }
+  }
+}
