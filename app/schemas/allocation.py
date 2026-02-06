@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
 class AllocationRequest(BaseModel):
-    barcode: str = Field(..., description="Barcode of the product to allocate")
+    barcode: str = Field(..., description="Kod kreskowy produktu do alokacji")
 
 class AllocationResponse(BaseModel):
     rack_id: int

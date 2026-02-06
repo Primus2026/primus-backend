@@ -6,7 +6,7 @@ class RackValidatorMixin(BaseModel):
     @classmethod
     def check_positive_values(cls, v):
         if v is not None and v <= 0:
-             raise ValueError("Value must be greater than 0")
+             raise ValueError("Wartość musi być większa od 0")
         return v
 
     @model_validator(mode='after')
@@ -17,22 +17,22 @@ class RackValidatorMixin(BaseModel):
         # Check if both are present in the model (for RackBase/Create) or set (updated)
         if temp_min is not None and temp_max is not None:
              if temp_min > temp_max:
-                raise ValueError("temp_min cannot be greater than temp_max")
+                raise ValueError("temp_min nie może być większe niż temp_max")
         return self
 
 # 1. Base class for common fields
 class RackBase(RackValidatorMixin):
-    designation: str = Field(..., description="Unique code/label for the rack (e.g. R-01)")
-    rows_m: int = Field(..., description="Number of rows (height levels)")
-    cols_n: int = Field(..., description="Number of columns (slots per level)")
-    temp_min: float = Field(..., description="Minimum allowable temperature (°C)")
-    temp_max: float = Field(..., description="Maximum allowable temperature (°C)")
-    max_weight_kg: float = Field(..., description="Maximum load capacity (kg)")
-    max_dims_x_mm: int = Field(..., description="Max item width (mm)")
-    max_dims_y_mm: int = Field(..., description="Max item height (mm)")
-    max_dims_z_mm: int = Field(..., description="Max item depth (mm)")
-    comment: Optional[str] = Field(None, description="Optional description or notes")
-    distance_from_exit_m: Optional[float] = Field(None, description="Distance from main exit (meters)")
+    designation: str = Field(..., description="Unikalny kod/oznaczenie regału (np. R-01)")
+    rows_m: int = Field(..., description="Liczba rzędów (poziomów wysokości)")
+    cols_n: int = Field(..., description="Liczba kolumn (slotów na poziom)")
+    temp_min: float = Field(..., description="Minimalna dopuszczalna temperatura (°C)")
+    temp_max: float = Field(..., description="Maksymalna dopuszczalna temperatura (°C)")
+    max_weight_kg: float = Field(..., description="Maksymalna nośność (kg)")
+    max_dims_x_mm: int = Field(..., description="Maksymalna szerokość przedmiotu (mm)")
+    max_dims_y_mm: int = Field(..., description="Maksymalna wysokość przedmiotu (mm)")
+    max_dims_z_mm: int = Field(..., description="Maksymalna głębokość przedmiotu (mm)")
+    comment: Optional[str] = Field(None, description="Opcjonalny opis lub uwagi")
+    distance_from_exit_m: Optional[float] = Field(None, description="Odległość od głównego wyjścia (metry)")
 
 
 class RackCreate(RackBase):
@@ -115,32 +115,32 @@ class RackCSVRow(BaseModel):
         # Pydantic v2: "check_fields=False" isn't needed here if we rely on standard behavior?
         # Standard behavior: validated fields are in info.data
         if "temp_min" in info.data and v < info.data["temp_min"]:
-            raise ValueError("TempMax must be greater than TempMin")
+            raise ValueError("TempMax musi być większe niż TempMin")
         return v
 
     @field_validator("rows", "cols", "max_width", "max_height", "max_depth")
     @classmethod
     def validate_positive_int(cls, v):
         if v <= 0:
-            raise ValueError("Must be a positive integer")
+            raise ValueError("Musi być dodatnią liczbą całkowitą")
         return v
     
     @field_validator("max_weight")
     @classmethod
     def validate_positive_float(cls, v):
         if v <= 0:
-            raise ValueError("Must be a positive float")
+            raise ValueError("Musi być dodatnią liczbą zmiennoprzecinkową")
         return v
 
 class RackImportSummary(BaseModel):
-    created_count: int = Field(0, description="Number of new racks created")
-    updated_count: int = Field(0, description="Number of existing racks updated")
-    skipped_count: int = Field(0, description="Number of rows skipped")
-    skipped_details: List[str] = Field([], description="Details on skipped rows")
+    created_count: int = Field(0, description="Liczba nowo utworzonych regałów")
+    updated_count: int = Field(0, description="Liczba zaktualizowanych istniejących regałów")
+    skipped_count: int = Field(0, description="Liczba pominiętych wierszy")
+    skipped_details: List[str] = Field([], description="Szczegóły pominiętych wierszy")
 
 class RackImportResult(BaseModel):
-    message: Optional[str] = Field(None, description="Result message")
-    summary: Optional[RackImportSummary] = Field(None, description="Import statistics")
-    status: Optional[str] = Field(None, description="Task status")
-    error: Optional[str] = Field(None, description="Error message if any")
-    task_id: Optional[str] = Field(None, description="Celery task ID")
+    message: Optional[str] = Field(None, description="Komunikat wyniku")
+    summary: Optional[RackImportSummary] = Field(None, description="Statystyki importu")
+    status: Optional[str] = Field(None, description="Status zadania")
+    error: Optional[str] = Field(None, description="Komunikat błędu jeśli wystąpił")
+    task_id: Optional[str] = Field(None, description="ID zadania Celery")

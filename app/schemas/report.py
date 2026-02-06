@@ -30,8 +30,8 @@ class ReportGenerateResponse(BaseModel):
 
 class ReportFilter(BaseModel):
     """Optional filters for report generation."""
-    rack_id: Optional[int] = Field(None, description="Filter items by specific Rack ID (optional)")
-    barcode: Optional[str] = Field(None, description="Filter items by Product Barcode (optional)")
+    rack_id: Optional[int] = Field(None, description="Filtruj przedmioty po konkretnym ID regału (opcjonalne)")
+    barcode: Optional[str] = Field(None, description="Filtruj przedmioty po kodzie kreskowym produktu (opcjonalne)")
 
     model_config = ConfigDict(
         json_schema_extra={

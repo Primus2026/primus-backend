@@ -17,9 +17,9 @@ class TwoFactorLoginRequest(BaseModel):
 
 
 class Token(BaseModel):
-    access_token: str = Field(..., description="JWT access token")
-    token_type: str = Field(..., description="Token type, e.g., 'bearer'")
-    is_2fa_required: bool = Field(False, description="Whether 2FA verification is pending")
+    access_token: str = Field(..., description="Token dostępu JWT")
+    token_type: str = Field(..., description="Typ tokena, np. 'bearer'")
+    is_2fa_required: bool = Field(False, description="Czy wymagana jest weryfikacja 2FA")
 
 
 class TokenPayload(BaseModel):
@@ -27,9 +27,9 @@ class TokenPayload(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    old_password: str = Field(..., description="Current active password")
-    new_password: str = Field(..., description="New password (min 8 chars)")
-    confirm_password: str = Field(..., description="Repeat new password for confirmation")
+    old_password: str = Field(..., description="Obecne aktywne hasło")
+    new_password: str = Field(..., description="Nowe hasło (min 8 znaków)")
+    confirm_password: str = Field(..., description="Powtórz nowe hasło dla potwierdzenia")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -45,12 +45,12 @@ class PasswordChangeRequest(BaseModel):
     @classmethod
     def validate_password_length(cls, v: str) -> str:
         if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
+            raise ValueError("Hasło musi mieć co najmniej 8 znaków")
         return v
 
     @field_validator("confirm_password")
     @classmethod
     def validate_passwords_match(cls, v: str, info: ValidationInfo) -> str:
         if "new_password" in info.data and v != info.data["new_password"]:
-            raise ValueError("Passwords do not match")
+            raise ValueError("Hasła nie są identyczne")
         return v

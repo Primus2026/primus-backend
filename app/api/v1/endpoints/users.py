@@ -13,35 +13,33 @@ router = APIRouter()
 @router.post(
     "/request_register",
     status_code=201,
-    summary="Register new user",
+    summary="Rejestracja nowego użytkownika",
     response_model=UserOut,
     responses={
-        409: {"description": "User with this login already exists"},
-        500: {"description": "Internal Server Error"},
+        409: {"description": "Użytkownik o takim loginie już istnieje"},
+        500: {"description": "Błąd serwera"},
     },
 )
 async def request_register(user: UserIn, db: AsyncSession = Depends(get_db)):
     """
-    Register a new user request.
-
-    This endpoint handles the initial registration of a user. The user is created with
-    `is_active=False` and requires administrator approval.
+    Rejestracja wniosku o nowe konto.
+    
+    Tworzy użytkownika ze statusem `is_active=False`. Wymaga akceptacji administratora.
     """
     return await UserService.request_registration(db=db, user_in=user)
 
 
 @router.post(
     "/create_admin",
-    summary="Create default admin",
+    summary="Utworzenie domyślnego administratora",
     response_model=UserOut | None,
-    responses={500: {"description": "Internal Server Error"}},
+    responses={500: {"description": "Błąd serwera"}},
 )
 async def create_admin(db: AsyncSession = Depends(get_db)):
     """
-    Create a default administrator account.
-
-    This is a utility endpoint to seed an admin user if one does not already exist
-    based on the `ADMIN_LOGIN` setting.
+    Utworzenie domyślnego konta administratora.
+    
+    Pomocniczy endpoint do inicjalizacji konta admina, jeśli nie istnieje.
     """
     return await UserService.create_admin(db)
 
@@ -62,10 +60,9 @@ async def approve_user(
     current_admin: User = Depends(deps.get_current_admin),
 ):
     """
-    Approve a pending user registration.
-
-    Activates a user account (`is_active=True`) that was previously created via registration.
-    Only accessible by administrators.
+    Zatwierdzenie oczekującej rejestracji.
+    
+    Aktywuje konto użytkownika (`is_active=True`). Dostępne tylko dla administratorów.
     """
     return await UserService.approve_user(db=db, user_id=user_id)
 
@@ -86,22 +83,21 @@ async def reject_user(
     current_admin: User = Depends(deps.get_current_admin),
 ):
     """
-    Reject a pending user registration.
-
-    Permanently deletes a user account that is pending approval.
-    Only accessible by administrators.
+    Odrzucenie oczekującej rejestracji.
+    
+    Trwale usuwa konto oczekujące na akceptację. Dostępne tylko dla administratorów.
     """
     return await UserService.reject_user(db=db, user_id=user_id)
 
 
-@router.get("/me", summary="Get current user", response_model=UserOut)
+@router.get("/me", summary="Pobranie danych obecnego użytkownika", response_model=UserOut)
 async def get_me(
     current_user: User = Depends(deps.get_current_user),
 ):
     """
-    Get current user details.
-
-    Retrieves the information of the currently authenticated user.
+    Zwraca szczegóły zalogowanego użytkownika.
+    
+    Pobiera informacje o aktualnie uwierzytelnionym użytkowniku.
     """
     return {
         "id": current_user.id,
@@ -112,7 +108,7 @@ async def get_me(
         "is_active": current_user.is_active,
     }
 
-@router.get("/warehouse_workers", summary="Gets all warehouse workers",
+@router.get("/warehouse_workers", summary="Pobranie listy magazynierów",
              response_model=List[UserOut]
              )
 async def get_all_warehouse_workers(
@@ -123,7 +119,7 @@ async def get_all_warehouse_workers(
     """
     return await UserService.get_all_warehouse_workers(db)
 
-@router.get("/requests", summary="Gets all users signup requests"
+@router.get("/requests", summary="Pobranie wniosków o rejestrację"
             , response_model=List[UserOut]
             )
 async def get_all_warehouse_workers(
@@ -151,9 +147,8 @@ async def delete_user(
     current_admin: User = Depends(deps.get_current_admin),
 ):
     """
-    Delete a user account.
-
-    Removes a user from the system. Cannot be used to delete administrators.
-    Only accessible by administrators.
+    Usunięcie konta użytkownika.
+    
+    Dostępne tylko dla administratorów. Nie można usunąć konta administratora.
     """
     return await UserService.delete_user(db=db, user_id=user_id)

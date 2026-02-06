@@ -14,7 +14,7 @@ async def create_backup(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:
     """
-    Trigger an on-demand backup (Async Background Task).
+    Uruchomienie backupu na żądanie (Asynchroniczne zadanie w tle).
     """
     task = create_backup_task.delay()
     return {"message": "Backup task initiated", "task_id": task.id}
@@ -24,7 +24,7 @@ async def list_backups(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:
     """
-    List all available backups in storage.
+    Pobranie listy dostępnych backupów w magazynie.
     """
     return await BackupService.list_backups()
 
@@ -34,7 +34,7 @@ async def get_backup_status(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:
     """
-    Get the status of a background backup task.
+    Pobranie statusu zadania backupu/przywracania.
     """
     task_result = AsyncResult(task_id)
     return {
@@ -50,8 +50,8 @@ async def restore_backup(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:
     """
-    Trigger a restore from a specific backup file (Async Background Task).
-    WARNING: This will overwrite current data.
+    Przywrócenie kopii zapasowej z pliku (Asynchroniczne zadanie w tle).
+    UWAGA: Ta operacja nadpisze obecne dane w bazie.
     """
     task = restore_backup_task.delay(filename)
     return {"message": f"Restore task initiated for {filename}", "task_id": task.id}

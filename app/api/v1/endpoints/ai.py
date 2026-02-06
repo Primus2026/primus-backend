@@ -28,19 +28,19 @@ router = APIRouter()
 @router.post(
     "/recognize",
     response_model=TaskRequestResponse,
-    summary="Recognize product from image",
-    responses={400: {"description": "File must be an image"}},
+    summary="Rozpoznaj produkt ze zdjęcia",
+    responses={400: {"description": "Plik musi być obrazem"}},
 )
 async def recognize_product(
     file: UploadFile = File(...), current_user: User = Depends(get_current_user)
 ):
     """
-    Recognize a product from an uploaded image.
-
-    This endpoint accepts an image file, saves it securely, and queues a background task
-    to perform object recognition using the configured AI model.
-
-    Returns a task ID which can be polled for status and results.
+    Rozpoznanie produktu na podstawie przesłanego zdjęcia.
+    
+    Endpoint przyjmuje plik obrazu, zapisuje go bezpiecznie i koleikuie zadanie w tle
+    do wykonania rozpoznawania obiektu przy użyciu skonfigurowanego modelu AI.
+    
+    Zwraca ID zadania, które można odpytywać o status i wyniki.
     """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -63,8 +63,8 @@ async def recognize_product(
 @router.post(
     "/feedback",
     response_model=FeedbackResponse,
-    summary="Submit feedback for AI training",
-    responses={400: {"description": "File must be an image"}},
+    summary="Prześlij feedback do treningu AI",
+    responses={400: {"description": "Plik musi być obrazem"}},
 )
 async def submit_feedback(
     product_id: int = Form(...),
@@ -73,10 +73,10 @@ async def submit_feedback(
     current_user: Any = Depends(get_current_user),  # Require Auth for feedback
 ):
     """
-    Submit feedback image for a specific product.
-
-    This endpoint allows authenticated users to upload correct images for a product ID.
-    These images are stored and used for future model retraining to improve accuracy.
+    Przesłanie zdjęcia feedbackowego dla konkretnego produktu.
+    
+    Umożliwia zalogowanym użytkownikom przesłanie poprawnych zdjęć dla danego ID produktu.
+    Zdjęcia te są przechowywane i wykorzystywane do przyszłego douczania modelu.
     """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -87,15 +87,15 @@ async def submit_feedback(
     return FeedbackResponse(success=True, message="Feedback saved successfully")
 
 
-@router.get("/retrain", response_model=TaskRequestResponse, summary="Retrain AI model")
+@router.get("/retrain", response_model=TaskRequestResponse, summary="Dotrenuj model AI")
 async def retrain_model(
     db: AsyncSession = Depends(get_db), current_user: Any = Depends(get_current_admin)
 ):
     """
-    Trigger the AI model retraining process.
-
-    This endpoint initiates a background Celery task to retrain the AI model using
-    all accumulated feedback and training data. This is an admin-only operation.
+    Uruchomienie procesu dotrenowania modelu AI.
+    
+    Inicjuje zadanie w tle (Celery), które dotrenowuje model używając
+    zgromadzonych danych feedbackowych i treningowych. Operacja tylko dla Administratora.
     """
 
     task = retrain_model_task.delay()
@@ -103,14 +103,15 @@ async def retrain_model(
     return TaskRequestResponse(task_id=task.id)
 
 
-@router.post("/model/reset", summary="Reset AI Model")
+@router.post("/model/reset", summary="Zresetuj model AI")
 async def reset_model(
     db: AsyncSession = Depends(get_db), current_user: Any = Depends(get_current_admin)
 ):
     """
-    Reset the AI model.
-
-    This endpoint deletes cached model files and resets the service. Use this when switching hardware (CPU/GPU) to force a fresh model download.
+    Reset modelu AI.
+    
+    Usuwa zcache'owane pliki modelu i restartuje serwis. Używane np. przy zmianie sprzętu (CPU/GPU)
+    wymuszając ponowne pobranie/inicjalizację modelu.
     """
     AIService.reset_model()
     return {
@@ -121,7 +122,7 @@ async def reset_model(
 @router.post(
     "/training-data/{product_id}",
     response_model=FeedbackResponse,
-    summary="Upload training data",
+    summary="Prześlij dane treningowe",
 )
 async def post_training_data(
     files: List[UploadFile],
@@ -130,10 +131,10 @@ async def post_training_data(
     current_user: Any = Depends(get_current_admin),
 ):
     """
-    Bulk upload training data for a product.
-
-    Allows administrators to upload multiple training images for a specific product ID
-    at once. These images are added to the dataset for retraining. This is an admin-only operation.
+    Masowe przesyłanie danych treningowych dla produktu.
+    
+    Umożliwia administratorom przesłanie wielu zdjęć treningowych dla konkretnego produktu na raz.
+    Zdjęcia są dodawane do zbioru danych do retreningu. Operacja tylko dla Administratora.
     """
     await AIService.bulk_save_training_data(files, product_id)
 
@@ -143,8 +144,8 @@ async def post_training_data(
 @router.get(
     "/task-status/{task_id}",
     response_model=TaskStatusResponse,
-    summary="Get retrain status",
-    responses={404: {"description": "Task not found"}},
+    summary="Pobierz status zadania",
+    responses={404: {"description": "Zadanie nie znalezione"}},
 )
 async def get_task_status(
     task_id: str,
@@ -152,10 +153,10 @@ async def get_task_status(
     current_user: Any = Depends(get_current_admin),
 ):
     """
-    Check the status of a background task.
-
-    Retrieves the current state (PENDING, STARTED, SUCCESS, FAILURE) and result
-    of a specific Celery task (e.g., retraining or prediction) given its ID.
+    Sprawdzenie statusu zadania w tle.
+    
+    Pobiera obecny stan (PENDING, STARTED, SUCCESS, FAILURE) oraz wynik
+    konkretnego zadania Celery (np. treningu lub predykcji) na podstawie ID.
     """
 
     task = celery_app.AsyncResult(task_id)

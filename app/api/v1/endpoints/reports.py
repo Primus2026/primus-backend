@@ -16,12 +16,12 @@ router = APIRouter()
     "/generate/{report_type}",
     response_model=ReportGenerateResponse,
     status_code=202,
-    summary="Trigger Report Generation",
+    summary="Rozpocznij generowanie raportu",
     responses={
-        202: {"description": "Report generation initiated successfully"},
-        401: {"description": "Not authenticated"},
-        400: {"description": "Invalid report type"},
-        501: {"description": "Temperature report not implemented yet"}
+        202: {"description": "Generowanie raportu rozpoczęte pomyślnie"},
+        401: {"description": "Brak autoryzacji"},
+        400: {"description": "Niepoprawny typ raportu"},
+        501: {"description": "Raport temperatur nie zaimplementowany"}
     },
 )
 def generate_report(
@@ -30,17 +30,17 @@ def generate_report(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Trigger generation of a report.
-    Returns a task_id to poll for status.
+    Uruchomienie generowania raportu.
+    Zwraca identyfikator zadania (task_id) do śledzenia postępu.
 
     **report_type**:
-    - **expiry**: Expiry date report.
-    - **audit**: Full warehouse audit report.
-    - **temp**: Temperature report (TO-DO).
+    - **expiry**: Raport dat ważności.
+    - **audit**: Pełny raport inwentaryzacyjny.
+    - **temp**: Raport temperatur (planowane).
 
-    Optional filters (only for expiry and temp report):
-    - **rack_id**: Filter by specific rack.
-    - **barcode**: Filter by product barcode.
+    Opcjonalne filtry (tylko dla raportów expiry i temp):
+    - **rack_id**: Filtrowanie po konkretnym regale.
+    - **barcode**: Filtrowanie po kodzie kreskowym produktu.
     """
     
     rack_id = filters.rack_id if filters else None
@@ -78,7 +78,7 @@ def get_report_status(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Check the status of a report task.
+    Sprawdzenie statusu zadania generowania raportu.
     """
     task_result = AsyncResult(task_id)
     
@@ -113,7 +113,7 @@ async def list_reports(
     current_user: User = Depends(get_current_user)
 ):
     """
-    List available reports in storage.
+    Lista dostępnych wygenerowanych raportów.
     """
     return await ReportStorageService.list_reports(type_filter)
 
@@ -131,7 +131,7 @@ async def download_report(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Download a specific report file.
+    Pobranie konkretnego pliku raportu.
     """
     from fastapi import Response
     content = await ReportStorageService.get_report_content(filename)

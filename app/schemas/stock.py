@@ -6,14 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 class RackLocation(BaseModel):
-    designation: str = Field(..., description="Rack designation")
-    row: int = Field(..., description="Item's position row")
-    col: int = Field(..., description="Item's position column")
+    designation: str = Field(..., description="Oznaczenie regału")
+    row: int = Field(..., description="Rząd pozycji (wysokość)")
+    col: int = Field(..., description="Kolumna pozycji")
 
 class RackLocationManual(BaseModel):
-    rack_id: int = Field(..., description="Rack ID")
-    row: int = Field(..., description="Item's position row")
-    col: int = Field(..., description="Item's position column")
+    rack_id: int = Field(..., description="ID regału")
+    row: int = Field(..., description="Rząd pozycji")
+    col: int = Field(..., description="Kolumna pozycji")
 
 from uuid import UUID
 

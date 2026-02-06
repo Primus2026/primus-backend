@@ -21,14 +21,13 @@ async def outbound_stock_item_initiate(
     redis_client: Redis = Depends(deps.get_redis), 
 ):
     """ 
-    Initiate the outbound process for a stock item
+    Inicjalizacja procesu wydania towaru (FIFO).
 
     **barcode**:
-    Barcode of the product to be removed
+    Kod kreskowy produktu do wydania.
 
-    Returns the location for the item to be removed (compliant with FIFO)
-    This can be followed by a post call to /confirm
-    
+    Zwraca lokalizację towaru do zdjęcia (zgodnie z zasadą FIFO).
+    Następnie należy wywołać /confirm.
     """
     return await StockService.outbound_stock_item_initiate(barcode, user, redis_client, db)
     
@@ -43,12 +42,12 @@ async def outbound_stock_item_confirm(
     redis_client: Redis = Depends(deps.get_redis),
 ):
     """
-    Confirm the outbound process for a stock item
+    Potwierdzenie wydania towaru.
 
     **rack_location**:
-    Location of the item to be removed
+    Lokalizacja towaru, który został fizycznie zdjęty.
 
-    Returns a message indicating success
+    Usuwa towar z stanu magazynowego.
     """
 
     return await StockService.outbound_stock_item_confirm(rack_location, user, redis_client, db)
@@ -61,12 +60,12 @@ async def outbound_stock_item_cancel(
     redis_client: Redis = Depends(deps.get_redis),
 ):
     """
-    Cancel the outbound process for a stock item
+    Anulowanie procesu wydania towaru.
 
     **rack_location**:
-    Location of the item to be removed
+    Lokalizacja towaru.
 
-    Returns a message indicating success
+    Zwalnia blokadę na towarze, przywracając go do dostępnej puli.
     """
 
     return await StockService.outbound_stock_item_cancel(rack_location, user, redis_client)
@@ -79,12 +78,12 @@ async def outbound_stock_item_manual(
     redis_client: Redis = Depends(deps.get_redis),
 ):
     """
-    Manually confirm the outbound process for a stock item
+    Ręczne wydanie towaru (Admin).
 
     **rack_location**:
-    Location of the item to be removed
+    Konkretna lokalizacja towaru do usunięcia.
 
-    Returns a message indicating success
+    Pozwala na usunięcie dowolnego towaru z pominięciem FIFO.
     """
 
     return await StockService.outbound_stock_item_manual(rack_location, db, redis_client)

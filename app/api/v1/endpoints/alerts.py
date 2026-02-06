@@ -31,7 +31,7 @@ async def resolve_alert(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Resolve an alert.
+    Rozwiązanie alertu (oznaczenie jako obsłużony).
     """
     return await AlertService.resolve_alert(alert_id, db, user)
 
@@ -43,7 +43,7 @@ async def get_alerts(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get all alerts with optional filtering.
+    Pobranie wszystkich alertów z opcjonalnym filtrowaniem.
     """
     return await AlertService.get_alerts(db, is_resolved, is_sent)
 
@@ -53,7 +53,7 @@ async def get_unsent_alerts(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get all unsent alerts.
+    Pobranie wszystkich niewysłanych alertów.
     """
     return await AlertService.get_unsent_alerts(db)
 
@@ -64,6 +64,6 @@ async def mark_alerts_as_read(
     alert_ids: list[int] = Body(...),
     ):
     """
-    Mark alerts as read.
+    Oznaczenie listy alertów jako przeczytane.
     """
     return await AlertService.mark_alerts_as_read(alert_ids, db, user)

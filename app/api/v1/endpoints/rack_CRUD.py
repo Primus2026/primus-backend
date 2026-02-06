@@ -18,9 +18,9 @@ async def create_rack(
     admin: User = Depends(deps.get_current_admin),
 ): 
     """
-    Create a new rack.
+    Utworzenie nowego regału.
     
-    Can only be executed by an admin user.
+    Wymaga uprawnień administratora.
     """
     return await RackService.create_rack(db, rack)
 
@@ -33,15 +33,14 @@ async def import_racks(
     admin: User = Depends(deps.get_current_admin),
 ):
     """
-    Import racks configuration from a CSV file.
+    Import regałów z pliku CSV.
     
-    The CSV file should contain rack definitions. The import process will:
-    - Validate the CSV format and content.
-    - Check for conflicts with existing stock items (e.g., if new rack definition is smaller than existing items).
-    - Create new racks or update existing ones.
-
-    The import process is executed asynchronously using Celery.
-    The result of the import process can be checked using the GET method on the /import/{celery_task_id} endpoint.
+    Plik CSV powinien zawierać definicje regałów. Proces:
+    - Walidacja formatu i zawartości.
+    - Sprawdzenie konfliktów z istniejącymi towarami.
+    - Tworzenie lub aktualizacja regałów.
+    
+    Proces jest asynchroniczny (Celery). Wynik można sprawdzić endpointem GET /import/{task_id}.
     """
     content = await file.read()
     task = import_racks_task.delay(content)
@@ -62,10 +61,9 @@ async def get_import_result(
     admin: User = Depends(deps.get_current_admin),
 ):
     """
-    Get the result of the import process.
-
-    Example use would be fetching every second to check status of the import process.
-    The task_id is returned after requesting an import with the POST method on the /import endpoint.
+    Pobranie wyniku procesu importu.
+    
+    Służy do odpytywania (polling) o status zadania importu zainicjowanego przez POST /import.
     """
     
     try:
@@ -98,8 +96,8 @@ async def get_racks_inventory_state(
     current_user: User = Depends(deps.get_current_user),
 ):
     """
-    Get all racks with current inventory state (active slots and weights).
-    Used by MQTT Listener to initialize cache to prevent cold start false alerts.
+    Pobranie wszystkich regałów wraz z aktualnym stanem magazynowym (sloty, wagi).
+    Używane przez MQTT Listener do inicjalizacji cache.
     """
     return await RackService.get_racks_with_inventory(db)
 
@@ -113,9 +111,7 @@ async def get_rack_stock_items(
     current_user: User = Depends(deps.get_current_user),
 ): 
     """
-    Get all stock items for a specific rack.
-    
-    Can be executed by any authenticated user.
+    Pobranie listy towarów składowanych na konkretnym regale.
     """
     return await RackService.get_rack_stock_items(db, rack_id)
 
@@ -131,9 +127,9 @@ async def update_rack(
     admin: User = Depends(deps.get_current_admin),
 ): 
     """
-    Update an existing rack.
+    Aktualizacja istniejącego regału.
     
-    Can only be executed by an admin user.
+    Wymaga uprawnień administratora.
     """
     return await RackService.update_rack(db, rack_id, rack)
 
@@ -147,10 +143,10 @@ async def delete_rack(
     admin: User = Depends(deps.get_current_admin),
 ): 
     """
-    Delete a rack.
+    Usunięcie regału.
     
-    Can only be executed by an admin user.
-    Will fail if the rack is not empty (contains stock items).
+    Wymaga uprawnień administratora.
+    Operacja nie powiedzie się, jeśli regał nie jest pusty.
     """
     await RackService.delete_rack(db, rack_id)
     return {"message": "Rack deleted successfully"}
@@ -164,9 +160,7 @@ async def get_rack(
     current_user: User = Depends(deps.get_current_user),
 ): 
     """
-    Get rack details by ID.
-    
-    Can be executed by any authenticated user.
+    Pobranie szczegółów regału po ID.
     """
     return await RackService.get_rack(db, rack_id)
 
@@ -177,8 +171,6 @@ async def get_all_racks(
     current_user: User = Depends(deps.get_current_user),
 ): 
     """
-    Get all racks.
-    
-    Can be executed by any authenticated user.
+    Pobranie listy wszystkich regałów.
     """
     return await RackService.get_all_racks(db)

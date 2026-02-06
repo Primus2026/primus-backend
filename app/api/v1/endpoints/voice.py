@@ -18,7 +18,7 @@ async def process_voice_command(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Process a voice command via Ollama (Qwen2.5) and execute the perceived intent.
+    Przetworzenie komendy głosowej przez Ollama (Qwen2.5) i wykonanie wykrytej intencji.
     """
     if not command.text:
         raise HTTPException(status_code=400, detail="Command text cannot be empty")

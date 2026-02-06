@@ -4,13 +4,13 @@ from typing import Optional, Dict, Any
 
 class RecognitionResult(BaseModel):
     product_id: int = Field(
-        ..., description="The unique identifier of the recognized product"
+        ..., description="Unikalny identyfikator rozpoznanego produktu"
     )
     confidence: float = Field(
-        ..., description="The confidence score of the recognition (0.0 to 1.0)"
+        ..., description="Poziom pewności rozpoznania (0.0 do 1.0)"
     )
-    name: str = Field(..., description="The name of the recognized product")
-    barcode: str = Field(..., description="The barcode of the recognized product")
+    name: str = Field(..., description="Nazwa rozpoznanego produktu")
+    barcode: str = Field(..., description="Kod kreskowy rozpoznanego produktu")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -25,9 +25,9 @@ class RecognitionResult(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
-    success: bool = Field(..., description="Indicates if the operation was successful")
+    success: bool = Field(..., description="Czy operacja zakończyła się sukcesem")
     message: str = Field(
-        ..., description="A message describing the result of the operation"
+        ..., description="Komunikat opisujący wynik operacji"
     )
 
     model_config = ConfigDict(
@@ -39,14 +39,14 @@ class FeedbackResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     task_id: str = Field(
-        ..., description="The unique identifier of the background task"
+        ..., description="Unikalny identyfikator zadania w tle"
     )
     status: str = Field(
         ...,
-        description="The current status of the task (PENDING, STARTED, SUCCESS, FAILURE)",
+        description="Obecny status zadania (PENDING, STARTED, SUCCESS, FAILURE)",
     )
     result: RecognitionResult | Dict[str, Any] | None = Field(
-        None, description="The result of the task if completed"
+        None, description="Wynik zadania jeśli zakończone"
     )
 
     model_config = ConfigDict(
@@ -62,5 +62,5 @@ class TaskStatusResponse(BaseModel):
 
 class TaskRequestResponse(BaseModel):
     task_id: str = Field(
-        ..., description="The unique identifier of the background task"
+        ..., description="Unikalny identyfikator zadania w tle"
     )

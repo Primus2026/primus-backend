@@ -16,6 +16,11 @@ async def allocate_item(
     user: User = Depends(deps.get_current_user),
     redis_client: Redis = Depends(deps.get_redis)
 ):
+    """
+    Inicjalizacja procesu alokacji towaru.
+    
+    Weryfikuje kod kreskowy, znajduje najlepsze miejsce na regale i rezerwuje je tymczasowo.
+    """
 
     return await AllocationService.allocate_item(
         db=db,
@@ -31,6 +36,11 @@ async def confirm_allocation(
     user: User = Depends(deps.get_current_user),
     redis_client: Redis = Depends(deps.get_redis)
 ):
+    """
+    Potwierdzenie alokacji (fizyczne odłożenie towaru).
+    
+    Finalizuje proces, zapisując towar w bazie danych i zwalniając tymczasową rezerwację.
+    """
     return await AllocationService.confirm_allocation(
         db=db,
         user=user,
@@ -44,6 +54,11 @@ async def cancel_allocation(
     user: User = Depends(deps.get_current_user), \
     redis_client: Redis = Depends(deps.get_redis)
 ):
+    """
+    Anulowanie alokacji.
+    
+    Zwalnia tymczasową rezerwację miejsca na regale.
+    """
     return await AllocationService.cancel_allocation(
         user=user,
         redis_client=redis_client,

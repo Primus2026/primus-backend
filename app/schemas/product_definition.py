@@ -3,17 +3,17 @@ from typing import List, Optional
 from app.database.models.product_definition import FrequencyClass 
 
 class ProductDefinitionIn(BaseModel):
-    name: str = Field(..., description="Name of the product/assortment")
-    barcode: str = Field(..., description="Unique barcode or QR code identifier")
-    req_temp_min: float = Field(..., description="Minimum required storage temperature (°C)")
-    req_temp_max: float = Field(..., description="Maximum required storage temperature (°C)")
-    weight_kg: float = Field(..., description="Weight per unit (kg)")
-    dims_x_mm: int = Field(..., description="Width (mm)")
-    dims_y_mm: int = Field(..., description="Height (mm)")
-    dims_z_mm: int = Field(..., description="Depth (mm)")
-    is_dangerous: bool = Field(..., description="Whether the item is hazardous/dangerous")
-    comment: str = Field(..., description="Additional notes or handling instructions")
-    expiry_days: int = Field(..., description="Shelf life in days from reception")
+    name: str = Field(..., description="Nazwa produktu/asortymentu")
+    barcode: str = Field(..., description="Unikalny kod kreskowy lub identyfikator QR")
+    req_temp_min: float = Field(..., description="Minimalna wymagana temperatura przechowywania (°C)")
+    req_temp_max: float = Field(..., description="Maksymalna wymagana temperatura przechowywania (°C)")
+    weight_kg: float = Field(..., description="Waga jednostkowa (kg)")
+    dims_x_mm: int = Field(..., description="Szerokość (mm)")
+    dims_y_mm: int = Field(..., description="Wysokość (mm)")
+    dims_z_mm: int = Field(..., description="Głębokość (mm)")
+    is_dangerous: bool = Field(..., description="Czy przedmiot jest niebezpieczny/szkodliwy")
+    comment: str = Field(..., description="Dodatkowe uwagi lub instrukcje obsługi")
+    expiry_days: int = Field(..., description="Okres przydatności w dniach od przyjęcia")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -90,43 +90,43 @@ class ProductDefinitionCSVRow(BaseModel):
     @validator("req_temp_max")
     def validate_temp_range(cls, v, values):
         if "req_temp_min" in values and v < values["req_temp_min"]:
-            raise ValueError("TempMax must be greater than TempMin")
+            raise ValueError("TempMax musi być większe niż TempMin")
         return v
 
     @validator("dims_x_mm", "dims_y_mm", "dims_z_mm")
     def validate_positive_int(cls, v):
         if v <= 0:
-            raise ValueError("Must be a positive integer")
+            raise ValueError("Musi być dodatnią liczbą całkowitą")
         return v
 
     @validator("weight_kg")
     def validate_positive_float(cls, v):
         if v <= 0:
-            raise ValueError("Must be a positive float")
+            raise ValueError("Musi być dodatnią liczbą zmiennoprzecinkową")
         return v
     
     @validator("expiry_days")
     def validate_expiry_days(cls, v):
         if v <= 0:
-            raise ValueError("Must be a positive integer")
+            raise ValueError("Musi być dodatnią liczbą całkowitą")
         return v
 
 
 class ProductImportSummary(BaseModel):
-    total_processed: int = Field(0, description="Total rows processed")
-    created_count: int = Field(0, description="Rows created")
-    updated_count: int = Field(0, description="Rows updated")
-    skipped_count: int = Field(0, description="Rows skipped")
-    skipped_details: List[dict] = Field([], description="Details of skipped rows")
-    success_count: int = Field(0, description="Rows successfully imported (Legacy)")
-    error_count: int = Field(0, description="Rows failed (Legacy)")
-    errors: List[str] = Field([], description="List of error messages")
-    successes: List[dict] = Field([], description="Details of successful imports")
+    total_processed: int = Field(0, description="Całkowita liczba przetworzonych wierszy")
+    created_count: int = Field(0, description="Liczba utworzonych wierszy")
+    updated_count: int = Field(0, description="Liczba zaktualizowanych wierszy")
+    skipped_count: int = Field(0, description="Liczba pominiętych wierszy")
+    skipped_details: List[dict] = Field([], description="Szczegóły pominiętych wierszy")
+    success_count: int = Field(0, description="Liczba pomyślnie zaimportowanych (Legacy)")
+    error_count: int = Field(0, description="Liczba błędnych (Legacy)")
+    errors: List[str] = Field([], description="Lista komunikatów błędów")
+    successes: List[dict] = Field([], description="Szczegóły udanych importów")
 
 
 class ProductImportResult(BaseModel):
-    message: Optional[str] = Field(None, description="Result message")
-    summary: Optional[ProductImportSummary] = Field(None, description="Import statistics")
-    status: Optional[str] = Field(None, description="Task status (e.g. SUCCESS, FAILURE)")
-    error: Optional[str] = Field(None, description="Generic error message")
-    task_id: Optional[str] = Field(None, description="Celery task ID")
+    message: Optional[str] = Field(None, description="Komunikat wyniku")
+    summary: Optional[ProductImportSummary] = Field(None, description="Statystyki importu")
+    status: Optional[str] = Field(None, description="Status zadania (np. SUCCESS, FAILURE)")
+    error: Optional[str] = Field(None, description="Ogólny komunikat błędu")
+    task_id: Optional[str] = Field(None, description="ID zadania Celery")

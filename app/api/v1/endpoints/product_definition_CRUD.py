@@ -35,9 +35,9 @@ async def create_product_definition(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Create a new product definition.
-
-    Can only be executed by an admin user.
+    Utworzenie nowej definicji produktu.
+    
+    Wymaga uprawnień administratora.
     """
     return await ProductDefinitionService.create_product_definition(
         db=db,
@@ -53,9 +53,9 @@ async def update_product_definition(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Update a product definition.
-
-    Can only be executed by an admin user.
+    Aktualizacja definicji produktu.
+    
+    Wymaga uprawnień administratora.
     """
     return await ProductDefinitionService.update_product_definition(
         db=db,
@@ -72,9 +72,9 @@ async def upload_image(
     file: UploadFile = File(...),
 ):
     """
-    Upload an image for a product definition.
-
-    Can only be executed by an admin user.
+    Przesłanie zdjęcia dla definicji produktu.
+    
+    Wymaga uprawnień administratora.
     """
     return await ProductDefinitionService.upload_image(
         db=db,
@@ -90,9 +90,8 @@ async def bulk_upload_images(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Bulk upload images for product definitions.
-    Matches files to products by filename (stored in photo_path).
-    Processing is done in background.
+    Masowe przesyłanie zdjęć produktów.
+    Dopasowuje pliki do produktów po nazwie pliku. Przetwarzanie w tle.
     """
     import uuid
     from app.core.config import settings
@@ -128,7 +127,7 @@ async def get_bulk_upload_status(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get the status of the bulk upload task.
+    Pobranie statusu zadania masowego przesyłania zdjęć.
     """
     try:
         task = celery_app.AsyncResult(task_id)
@@ -164,7 +163,7 @@ async def get_product_definition(
     ),  # Allow read access to authenticated users or public? adhering to strict for now but easily changeable
 ):
     """
-    Get a specific product definition by ID.
+    Pobranie szczegółów produktu po ID.
     """
     return await ProductDefinitionService.get_product_definition(
         db=db, product_definition_id=product_definition_id
@@ -179,7 +178,7 @@ async def get_product_definitions(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get all product definitions.
+    Pobranie listy wszystkich definicji produktów.
     """
     return await ProductDefinitionService.get_product_definitions(
         db=db, skip=skip, limit=limit
@@ -193,9 +192,9 @@ async def delete_product_definition(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Delete a product definition and its associated image.
-
-    Can only be executed by an admin user.
+    Usunięcie definicji produktu i powiązanego zdjęcia.
+    
+    Wymaga uprawnień administratora.
     """
     return await ProductDefinitionService.delete_product_definition(
         db=db, product_definition_id=product_definition_id
@@ -209,9 +208,9 @@ async def import_product_definitions_csv(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Import product definitions from a CSV file (Asynchronous).
-
-    Can only be executed by an admin user.
+    Import definicji produktów z pliku CSV (Asynchroniczny).
+    
+    Wymaga uprawnień administratora.
     """
     content = await file.read()
     task = import_task.delay(content)
@@ -227,7 +226,7 @@ async def get_import_result(
     user: User = Depends(deps.get_current_user),
 ):
     """
-    Get the status/result of the import task.
+    Pobranie statusu zadania importu produktów.
     """
     try:
         task = celery_app.AsyncResult(task_id)
