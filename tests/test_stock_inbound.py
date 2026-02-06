@@ -129,7 +129,7 @@ async def test_allocate_item_no_suitable_racks_requirements(db_session: AsyncSes
         await AllocationService.allocate_item(db_session, "H-999", user, clean_redis)
     
     assert excinfo.value.status_code == 400
-    assert "No suitable racks found" in excinfo.value.detail
+    assert "Nie znaleziono regałów spełniających wymagań fizycznych" in excinfo.value.detail
 
 @pytest.mark.asyncio
 async def test_allocate_item_no_slots(db_session: AsyncSession, clean_redis):
@@ -165,7 +165,7 @@ async def test_allocate_item_no_slots(db_session: AsyncSession, clean_redis):
         await AllocationService.allocate_item(db_session, "F-000", user, clean_redis)
         
     assert excinfo.value.status_code == 400
-    assert "No available space" in excinfo.value.detail
+    assert "Nie znaleziono wolnego miejsca" in excinfo.value.detail
 
 @pytest.mark.asyncio
 async def test_confirm_allocation_success(db_session: AsyncSession, clean_redis):
@@ -228,7 +228,7 @@ async def test_confirm_allocation_unauthorized(db_session: AsyncSession, clean_r
         await AllocationService.confirm_allocation(payload, user_intruder, clean_redis, db_session)
         
     assert excinfo.value.status_code == 400
-    assert "not locked for this user" in excinfo.value.detail
+    assert "nie jest zablokowana dla tego użytkownika" in excinfo.value.detail
 
 @pytest.mark.asyncio
 async def test_cancel_allocation_success(db_session: AsyncSession, clean_redis):

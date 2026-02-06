@@ -61,7 +61,7 @@ async def test_login_incorrect_password(async_client: AsyncClient, auth_user: Us
         data={"username": auth_user.login, "password": "wrong_password"}
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Incorrect login or password"
+    assert response.json()["detail"] == "Niepoprawny login lub hasło"
 
 @pytest.mark.asyncio
 async def test_login_inactive_user(async_client: AsyncClient, inactive_user: User):
@@ -70,7 +70,7 @@ async def test_login_inactive_user(async_client: AsyncClient, inactive_user: Use
         data={"username": inactive_user.login, "password": "secret_password"}
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Inactive user"
+    assert response.json()["detail"] == "Nieaktywny użytkownik"
 
 @pytest.mark.asyncio
 async def test_access_me_without_token(async_client: AsyncClient):
@@ -107,7 +107,7 @@ async def test_2fa_setup_flow(async_client: AsyncClient, auth_user: User):
         headers={"Authorization": f"Bearer {token}"}
     )
     assert verify_resp.status_code == 200
-    assert verify_resp.json()["message"] == "2FA enabled successfully"
+    assert verify_resp.json()["message"] == "2FA włączone pomyślnie"
 
     # 4. Verify status in /me
     me_resp = await async_client.get(
@@ -190,7 +190,7 @@ async def test_change_password_success(async_client: AsyncClient, auth_user: Use
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
-    assert response.json()["message"] == "Password changed successfully"
+    assert response.json()["message"] == "Hasło zmienione pomyślnie"
 
     # Verify old password no longer works
     login_resp = await async_client.post(
@@ -226,7 +226,7 @@ async def test_change_password_incorrect_old_password(async_client: AsyncClient,
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Incorrect current password"
+    assert response.json()["detail"] == "Niepoprawne hasło"
 
 @pytest.mark.asyncio
 async def test_change_password_mismatch(async_client: AsyncClient, auth_user: User):

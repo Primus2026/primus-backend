@@ -125,7 +125,7 @@ class StockService:
             f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}"
         )
 
-        return Msg(message="Stock item removed successfully")
+        return Msg(message="Produkt został usunięty pomyślnie")
 
     @staticmethod
     async def outbound_stock_item_cancel(
@@ -158,7 +158,7 @@ class StockService:
             f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}"
         )
 
-        return Msg(message="Stock item outbound process cancelled successfully")
+        return Msg(message="Proces wydawania asortymentu został anulowany pomyślnie")
 
     @staticmethod
     async def get_grouped_stocks(

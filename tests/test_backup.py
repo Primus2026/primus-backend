@@ -69,6 +69,7 @@ async def test_restore_backup_flow():
     filename = "backup_test.tar.gz"
     
     with patch("app.core.storage.storage.save", new_callable=AsyncMock) as mock_storage_save, \
+         patch("app.core.storage.storage.get", new_callable=AsyncMock) as mock_storage_get, \
          patch("aiofiles.open", new_callable=MagicMock) as mock_aio_open, \
          patch("app.services.backup_service.BackupService._extract_tar") as mock_extract_tar, \
          patch("asyncio.create_subprocess_shell") as mock_subprocess, \
@@ -88,8 +89,8 @@ async def test_restore_backup_flow():
         mock_file_handle.read.return_value = b"content"
         mock_aio_open.return_value.__aenter__.return_value = mock_file_handle
         
-        # Mock exists to pass checks
-        mock_exists.return_value = True
+        # Mock storage.get to return encrypted content
+        mock_storage_get.return_value = BackupService._cipher.encrypt(b"test_content") if BackupService._cipher else b"test_content"
 
         # Mock os.walk to verify media restoration logic
         # root, dirs, files

@@ -70,7 +70,7 @@ async def test_delete_product_definition_with_stock_items(async_client: AsyncCli
     )
     
     assert response.status_code == 409
-    assert "Cannot delete product definition" in response.json()["detail"]
+    assert "Nie można usunąć produktu, ponieważ istnieją powiązane z nim pozycje w magazynie." in response.json()["detail"]
 
 @pytest.mark.asyncio
 async def test_delete_product_definition_with_stats_success(async_client: AsyncClient, admin_token: str, sample_product_definition, db_session: AsyncSession):

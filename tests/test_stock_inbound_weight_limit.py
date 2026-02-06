@@ -72,7 +72,7 @@ async def test_allocate_item_weight_limit_total(db_session: AsyncSession, clean_
     # Our new message is "No suitable racks found (weight limit reached)" 
     # OR "No suitable racks found meeting physical requirements" if pre-filter fails (it shouldn't, 6 < 100)
     # The message comes from the second check: "No suitable racks found (weight limit reached)"
-    assert "weight limit reached" in excinfo.value.detail or "No suitable racks found" in excinfo.value.detail
+    assert "limit wagowy został osiągnięty" in excinfo.value.detail or "Nie znaleziono regałów" in excinfo.value.detail
 
     # 4. Try to allocate New Item (4kg) -> Tuple 95+4=99 <= 100. Should Success.
     prod_pass = ProductDefinition(

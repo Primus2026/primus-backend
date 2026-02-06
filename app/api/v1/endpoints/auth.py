@@ -39,7 +39,7 @@ async def login_access_token(
         db, form_data.username, form_data.password
     )
     if not user:
-        raise HTTPException(status_code=400, detail="Incorrect login or password")
+        raise HTTPException(status_code=400, detail="Niepoprawny login lub hasło")
 
     return AuthService.create_login_token(user)
 
@@ -89,7 +89,7 @@ async def verify_2fa_setup(
     if not success:
         raise HTTPException(status_code=400, detail="Invalid code")
 
-    return {"message": "2FA enabled successfully"}
+    return {"message": "2FA włączone pomyślnie"}
 
 
 @router.post(
@@ -143,5 +143,5 @@ async def change_password(
     await AuthService.change_password(
         db, current_user, body.old_password, body.new_password
     )
-    return {"message": "Password changed successfully"}
+    return {"message": "Hasło zmienione pomyślnie"}
 

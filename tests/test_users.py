@@ -35,7 +35,7 @@ async def test_request_registration_login_conflict(async_client: AsyncClient, db
     user_in = {"login": "taken", "email": "other@email.pl", "password": "password"}
     response = await async_client.post(f"{BASE_URL}/request_register", json=user_in)
     assert response.status_code == 409
-    assert response.json()["detail"] == "User with this login already exists"
+    assert response.json()["detail"] == "Użytkownik z tym loginem już istnieje"
 
 # --- ADMIN CREATION ---
 

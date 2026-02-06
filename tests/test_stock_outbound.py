@@ -117,7 +117,7 @@ async def test_confirm_success(
         redis_client=mock_redis
     )
 
-    assert result.message == "Stock item removed successfully"
+    assert result.message == "Produkt został usunięty pomyślnie"
     
     # Verify DB deletion
     result_db = await db_session.execute(select(StockItem).where(StockItem.id == item.id))
@@ -147,7 +147,7 @@ async def test_cancel_success(
         redis_client=mock_redis
     )
     
-    assert result.message == "Stock item outbound process cancelled successfully"
+    assert result.message == "Proces wydawania asortymentu został anulowany pomyślnie"
     mock_redis.delete.assert_called()
 
 @pytest.mark.asyncio
@@ -251,7 +251,7 @@ async def test_outbound_confirm_forbidden(
             redis_client=mock_redis
         )
     
-    assert excinfo.value.detail == "You are not authorized to confirm this outbound process"
+    assert excinfo.value.detail == "Nie jesteś upoważniony do potwierdzenia tego procesu"
 
 @pytest.mark.asyncio
 async def test_initiate_not_found(
@@ -279,4 +279,4 @@ async def test_initiate_not_found(
         )
     
     assert excinfo.value.status_code == 404
-    assert excinfo.value.detail == "Stock item not found"
+    assert excinfo.value.detail == "Produkt nie został znaleziony"

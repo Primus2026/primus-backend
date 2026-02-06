@@ -68,7 +68,7 @@ async def test_create_rack_duplicate(
     
     response = await authorized_admin_client.post("/api/v1/racks/", json=payload)
     assert response.status_code == 400
-    assert "already exists" in response.json()["detail"]
+    assert "Półka o tym oznaczeniu już istnieje" in response.json()["detail"]
 
 @pytest.mark.asyncio
 async def test_get_rack_success(
@@ -197,7 +197,7 @@ async def test_delete_rack_not_empty(
     
     response = await authorized_admin_client.delete(f"/api/v1/racks/{rack.id}")
     assert response.status_code == 400
-    assert "Rack has items" in response.json().get("detail", "")
+    assert "Regał ma produkty, musi być pusty" in response.json().get("detail", "")
 
 @pytest.mark.asyncio
 async def test_create_rack_invalid_data(
@@ -247,7 +247,7 @@ async def test_update_rack_validation(
     payload_temp = {"temp_max": 5}
     response = await authorized_admin_client.put(f"/api/v1/racks/{rack.id}", json=payload_temp)
     assert response.status_code == 400
-    assert "temp_min cannot be greater than temp_max" in response.json()["detail"]
+    assert "Minimalna temperatura nie może być wyższa niż maksymalna temperatura" in response.json()["detail"]
 
     # 2. Negative value update (Pydantic Check)
     payload_neg = {"distance_from_exit_m": -10}
