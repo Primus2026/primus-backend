@@ -48,6 +48,9 @@ app.add_middleware(
     allow_headers=["*"],            
 )
 
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "backend", "nginx"])
+
 from fastapi.staticfiles import StaticFiles
 import os
 
