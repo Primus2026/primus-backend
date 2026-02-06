@@ -80,7 +80,7 @@ async def async_client(db_session, mock_redis) -> AsyncGenerator[AsyncClient, No
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = override_get_redis
     
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
         yield client
     
     app.dependency_overrides.clear()
