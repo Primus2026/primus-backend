@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, HTTPException, Depends
 
 
-@router.post("/", response_model=dict)
+@router.post("", response_model=dict)
 async def process_voice_command(
     command: VoiceCommandRequest,
     db: AsyncSession = Depends(get_db)

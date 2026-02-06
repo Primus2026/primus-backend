@@ -8,7 +8,7 @@ from app.database.models.user import User
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ProductStockGroup])
+@router.get("", response_model=List[ProductStockGroup])
 async def get_grouped_stocks(
     db: AsyncSession = Depends(deps.get_db),
     admin: User = Depends(deps.get_current_admin), 

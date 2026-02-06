@@ -23,6 +23,7 @@ from app.core.config import settings
 import os
 import tempfile
 import aiofiles
+from sqlalchemy.pool import NullPool
 
 def run_async(coro):
     try:
@@ -32,9 +33,24 @@ def run_async(coro):
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(coro)
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_report_session():
+    # Create a dedicated engine for this task/loop to avoid sharing issues in Celery
+    engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+    async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+    # Dispose engine after session is done
+    await engine.dispose()
+
 async def _process_expiry_report_async(task_id: str, rack_id: int | None = None, barcode: str | None = None):
     try:
-        async with SessionLocal() as db:
+        async with get_report_session() as db:
             # 1. Query Data: Items expiring within 24h or already expired
             now = datetime.now().astimezone()
             threshold = now + timedelta(hours=24)
@@ -143,7 +159,7 @@ def process_expiry_report(task_id: str, rack_id: int | None = None, barcode: str
 
 async def _process_audit_report_async(task_id: str):
     try:
-        async with SessionLocal() as db:
+        async with get_report_session() as db:
             # 1. Fetch Racks (for fill percentage)
             stmt_racks = select(Rack).options(selectinload(Rack.items))
             result_racks = await db.execute(stmt_racks)
@@ -195,7 +211,7 @@ def process_audit_report(task_id: str):
 
 async def _process_temp_report_async(task_id: str, rack_id: int | None = None, barcode: str | None = None):
     try:
-        async with SessionLocal() as db:
+        async with get_report_session() as db:
             # 1. Query Data: Temp Alerts
             from app.schemas.alert import AlertType
             stmt = select(Alert).where(Alert.alert_type == AlertType.TEMP).order_by(Alert.created_at.desc())

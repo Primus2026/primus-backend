@@ -90,7 +90,9 @@ Supported Intents:
     @classmethod
     async def _fetch_products(cls, db: AsyncSession) -> list[dict]:
         try:
-            result = await db.execute(select(ProductDefinition))
+            # OPTIMIZATION: Limit context to 100 products to prevent LLM timeout with large DBs
+            # Ideally this should use RAG or keyword search, but for now we hard limit.
+            result = await db.execute(select(ProductDefinition).limit(100))
             products = result.scalars().all()
             return [{"name": p.name, "barcode": p.barcode} for p in products]
         except Exception as e:
@@ -102,7 +104,7 @@ Supported Intents:
         url = settings.OLLAMA_URL
         prompt = f"{system_prompt}\n\nUser Command: {text}\nJSON Response:"
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 url,
                 json={
@@ -147,7 +149,7 @@ Supported Intents:
              {"role": "user", "content": text}
          ]
 
-         async with httpx.AsyncClient(timeout=30.0) as client:
+         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 url,
                 headers=headers,

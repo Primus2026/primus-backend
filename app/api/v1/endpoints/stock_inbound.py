@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 
 router = APIRouter()
 
-@router.post("/", response_model=AllocationResponse, status_code=202)
+@router.post("", response_model=AllocationResponse, status_code=202)
 async def allocate_item(
     payload: AllocationRequest,
     db: AsyncSession = Depends(deps.get_db),
