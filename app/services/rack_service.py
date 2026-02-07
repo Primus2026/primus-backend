@@ -153,12 +153,34 @@ class RackService:
         # Parse CSV
         rows = []
         try:
-            # Skip lines starting with # before parsing
-            lines = [line for line in content.splitlines() if not line.strip().startswith("#")]
-            reader = csv.DictReader(lines, delimiter=";")
+            processed_lines = []
+            header_found = False
+            
+            for line in content.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                
+                # Jeśli linia to nagłówek (zawiera nasze kluczowe słowa), 
+                # usuwamy '#' i traktujemy jako normalną linię
+                if "Oznaczenie;M;N;" in stripped:
+                    processed_lines.append(stripped.lstrip("#"))
+                    header_found = True
+                # Jeśli to zwykły komentarz, pomijamy
+                elif stripped.startswith("#"):
+                    continue
+                else:
+                    processed_lines.append(stripped)
+
+            if not header_found:
+                raise ValueError("Nie znaleziono linii nagłówkowej w pliku CSV.")
+
+            reader = csv.DictReader(processed_lines, delimiter=";")
             for row_dict in reader:
-                # Filter out None/empty keys if any
-                clean_row = {k: v for k, v in row_dict.items() if k}
+                # Filtracja pustych kluczy
+                clean_row = {k: v.strip() if v else v for k, v in row_dict.items() if k}
+                if not clean_row.get("Oznaczenie"): # Pomijaj puste linie
+                    continue
                 rows.append(RackCSVRow.model_validate(clean_row))
         except Exception as e:
 
