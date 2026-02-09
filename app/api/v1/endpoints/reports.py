@@ -100,7 +100,7 @@ def get_report_status(
     return response
 
 @router.get(
-    "/",
+    "",
     response_model=List[ReportResponse],
     summary="List Reports",
     responses={

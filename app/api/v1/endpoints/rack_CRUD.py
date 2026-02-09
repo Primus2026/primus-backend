@@ -11,7 +11,7 @@ from app.tasks.csv_import import import_racks as import_racks_task
 
 router = APIRouter()
 
-@router.post("/", response_model=RackOut)
+@router.post("", response_model=RackOut)
 async def create_rack(
     rack: RackCreate,
     db: AsyncSession = Depends(get_db),
@@ -165,7 +165,7 @@ async def get_rack(
     return await RackService.get_rack(db, rack_id)
 
 
-@router.get("/", response_model=list[RackOut])
+@router.get("", response_model=list[RackOut])
 async def get_all_racks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),

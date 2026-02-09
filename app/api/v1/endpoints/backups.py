@@ -9,7 +9,7 @@ from celery.result import AsyncResult
 
 router = APIRouter()
 
-@router.post("/", response_model=dict)
+@router.post("", response_model=dict)
 async def create_backup(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:
@@ -19,7 +19,7 @@ async def create_backup(
     task = create_backup_task.delay()
     return {"message": "Backup task initiated", "task_id": task.id}
 
-@router.get("/", response_model=List[dict])
+@router.get("", response_model=List[dict])
 async def list_backups(
     current_user: User = Depends(deps.get_current_admin),
 ) -> Any:

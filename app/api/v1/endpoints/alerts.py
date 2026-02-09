@@ -11,7 +11,7 @@ from fastapi import Body
 
 router = APIRouter()
 
-@router.post("/", response_model=AlertOut, status_code=201)
+@router.post("", response_model=AlertOut, status_code=201)
 async def create_alert(
     alert_in: AlertCreate,
     db: AsyncSession = Depends(get_db),
@@ -35,7 +35,7 @@ async def resolve_alert(
     """
     return await AlertService.resolve_alert(alert_id, db, user)
 
-@router.get("/", response_model=list[AlertOut], status_code=200)
+@router.get("", response_model=list[AlertOut], status_code=200)
 async def get_alerts(
     is_resolved: bool | None = None,
     is_sent: bool | None = None,

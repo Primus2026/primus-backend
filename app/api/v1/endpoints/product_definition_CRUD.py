@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 @router.post(
-    "/",
+    "",
     response_model=ProductDefinitionOut
 )
 async def create_product_definition(
@@ -170,7 +170,7 @@ async def get_product_definition(
     )
 
 
-@router.get("/", response_model=list[ProductDefinitionOut])
+@router.get("", response_model=list[ProductDefinitionOut])
 async def get_product_definitions(
     skip: int = 0,
     limit: int = 100,

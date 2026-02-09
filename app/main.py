@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from .core.config import settings
 from .api.v1.api import api_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +36,13 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def strip_trailing_slash(request: Request, call_next):
+    if request.url.path.endswith("/") and request.url.path != "/":
+        request.scope["path"] = request.url.path.rstrip("/")
+    response = await call_next(request)
+    return response
 
 
 origins = ["*"] # will be updated later
