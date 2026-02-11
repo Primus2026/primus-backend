@@ -2,18 +2,19 @@
 FROM python:3.11-slim as builder
 WORKDIR /app
 RUN pip install --no-cache-dir poetry
-ENV POETRY_HTTP_TIMEOUT=1200
+ENV POETRY_HTTP_TIMEOUT=2400
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+ENV POETRY_INSTALLER_MAX_WORKERS=4
 
 # Copy the TOML and lock file
 COPY pyproject.toml poetry.lock* ./
 
-# Build Venvs using cache mounts
+# Build venvs: install lightweight backend first, then add AI deps for worker
 RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --with ai --no-interaction --no-ansi --no-root && \
-    cp -r .venv .venv-worker && \
     poetry install --without ai --no-interaction --no-ansi --no-root && \
-    mv .venv .venv-backend
+    cp -r .venv .venv-backend && \
+    poetry install --with ai --no-interaction --no-ansi --no-root && \
+    mv .venv .venv-worker
 
 # Stage 2: Backend Runtime
 FROM python:3.11-slim as backend
