@@ -273,31 +273,60 @@ class AIService:
             if not os.path.isdir(class_path):
                 continue
             
-            # Create class dirs in train/val
-            os.makedirs(os.path.join(train_dir, class_name), exist_ok=True)
-            os.makedirs(os.path.join(val_dir, class_name), exist_ok=True)
-
-            images = [
-                f
-                for f in os.listdir(class_path)
+            # Validate images first
+            valid_images = []
+            files = [
+                f for f in os.listdir(class_path)
                 if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".webp"))
             ]
             
-            # Filter out empty files?
+            for f in files:
+                file_path = os.path.join(class_path, f)
+                try:
+                    from PIL import Image
+                    with Image.open(file_path) as img:
+                        img.verify()
+                    valid_images.append(f)
+                except Exception as e:
+                    logger.warning(f"Deleting invalid image {file_path}: {e}")
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+
+            if not valid_images:
+                continue
+
+            # Create class dirs in train/val
+            os.makedirs(os.path.join(train_dir, class_name), exist_ok=True)
+            os.makedirs(os.path.join(val_dir, class_name), exist_ok=True)
             
+            images = valid_images
             random.shuffle(images)
             if images:
                 has_data = True
 
-            # Ensure at least 1 image goes to training
-            split_idx = int(len(images) * split_ratio)
-            if split_idx == 0 and len(images) > 0:
-                split_idx = 1
-            
+            train_imgs = []
+            val_imgs = []
 
-            train_imgs = images[:split_idx]
-            val_imgs = images[split_idx:]
-            
+            if len(images) == 1:
+                # Special case: 1 image -> copy to both
+                train_imgs = images
+                val_imgs = images
+            else:
+                split_idx = int(len(images) * split_ratio)
+                
+                # Ensure at least 1 image in train
+                if split_idx == 0:
+                    split_idx = 1
+                
+                train_imgs = images[:split_idx]
+                val_imgs = images[split_idx:]
+                
+                # Ensure at least 1 image in val if we have > 1 image
+                if not val_imgs and len(images) > 1:
+                     val_imgs = [train_imgs[-1]]
+
             # Copy files
             for img in train_imgs:
                 shutil.copy2(os.path.join(class_path, img), os.path.join(train_dir, class_name, img))
