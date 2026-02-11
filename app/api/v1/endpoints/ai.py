@@ -150,7 +150,7 @@ async def post_training_data(
 async def get_task_status(
     task_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: Any = Depends(get_current_admin),
+    current_user: Any = Depends(get_current_user),
 ):
     """
     Sprawdzenie statusu zadania w tle.
