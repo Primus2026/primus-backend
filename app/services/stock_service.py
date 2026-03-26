@@ -377,7 +377,7 @@ class StockService:
         # 1. Ruch kamery nad pole Inbound (Slot 1,1)
         # Zakładamy, że produkt leży fizycznie na polu 1,1 (współrzędne 0,0 w systemie 0-7)
         gcode.move_camera_to_grid(col=1, row=1)
-        await asyncio.sleep(0.8) # Czas na focus kamery
+        await asyncio.sleep(0.1) # Czas na focus kamery
 
         # 2. Próba rozpoznania produktu
         barcode = camera.decode_qr()
@@ -410,11 +410,10 @@ class StockService:
 
         # 5. Fizyczny ruch (Pick & Place)
         try:
-            pass
             # Pobranie ze slotu 1,1 (Inbound)
-            # gcode.pick_from_grid(col=1, row=1, level=0)
+            gcode.pick_from_grid(col=1, row=1, level="bottom")
             # # Odłożenie na miejsce docelowe
-            # gcode.place_on_grid(col=allocation.col, row=allocation.row, level=allocation.y_position)
+            gcode.place_on_grid(col=allocation.col, row=allocation.row, level=allocation.y_position)
         except Exception as e:
             logger.error(f"G-Code Error: {e}")
             raise HTTPException(status_code=500, detail=f"Błąd mechaniczny drukarki: {str(e)}")

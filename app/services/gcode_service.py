@@ -115,7 +115,9 @@ class GCodeService:
         Wysyła jedną komendę G-code i czeka na potwierdzenie 'ok'.
         """
         if not self.is_connected:
-            raise ConnectionError("Rozłączono z drukarką. Użyj Connect najpierw.")
+            logger.warning("Drukarka nie jest podłączona. Automatyczne łaczenie...")
+            self.connect()
+
             
         cmd = cmd.strip()
         if not cmd or cmd.startswith(";"):

@@ -41,7 +41,7 @@ class InventoryService:
                 # Ruch kamerą nad pole
                 gcode.move_camera_to_grid(col=col, row=row)
                 # Krótka pauza na stabilizację obrazu
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
 
                 # Próba detekcji: QR -> Figura
                 detected_barcode = camera.decode_qr()

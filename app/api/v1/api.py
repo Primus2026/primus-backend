@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, users, rack_CRUD, product_definition_CRUD, 
     reports, stock_outbound, ai, stock, stock_inbound, 
-    alerts, backups, voice, camera, gcode
+    alerts, backups, voice, camera, gcode, inventory
 )
 
 api_router = APIRouter()
@@ -24,4 +24,4 @@ api_router.include_router(backups.router, prefix="/backups", tags=["backups"])
 # 3D Printer Warehouse Endpoints (Final Stage)
 api_router.include_router(camera.router, prefix="/camera", tags=["Camera"])
 api_router.include_router(gcode.router, prefix="/gcode", tags=["G-code Printer"])
-
+api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])

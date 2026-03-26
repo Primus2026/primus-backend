@@ -46,7 +46,7 @@ class CameraService:
         """Prosi Windowsowy skrypt o rozpoznanie figury (YOLO) z aktualnej klatki kamery."""
         try:
             # Endpoint na Windowsie zmieniamy na GET, ponieważ to Windows trzyma kamerę
-            resp = requests.get(f"{WINDOWS_AI_URL}/scan-pictogram", timeout=15.0)
+            resp = requests.get(f"{WINDOWS_AI_URL}/analyze-pictogram", timeout=15.0)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("status") == "ok":
