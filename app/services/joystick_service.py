@@ -71,11 +71,6 @@ class JoystickService:
             
         logger.info(f"WiFi-Joystick Ruch: dx={dx}, dy={dy}")
         
-        if not gcode.is_connected:
-            # DRY RUN LOGGING
-            logger.info(f"[DRY-RUN] Jogging (z weryfikacją granic): X{dx} Y{dy}")
-            return
-            
         # Spin up a thread to run the blocking gcode.jog
         threading.Thread(target=self._run_jog_safe, args=(dx, dy), daemon=True).start()
 
@@ -99,10 +94,6 @@ class JoystickService:
         self.last_action_time = now
         logger.info(f"Otrzymano WiFi-Trigger: {action_type}.")
         
-        if not gcode.is_connected:
-            logger.info(f"[DRY-RUN] Akcja: {action_type} (centrowanie + ruch osiowy)")
-            return
-            
         threading.Thread(target=self._run_action_safe, args=(action_type,), daemon=True).start()
         
     def _run_action_safe(self, action_type: str):
