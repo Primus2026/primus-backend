@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from app.services.gcode_service import gcode
 from app.schemas.gcode import (
     ConnectRequest, CommandRequest, MoveRequest,
-    GridPositionRequest, JoystickRequest, PrinterStatusResponse
+    GridPositionRequest, JoystickRequest, JoystickActionRequest, PrinterStatusResponse
 )
 
 router = APIRouter()
@@ -91,5 +91,29 @@ async def magnet_on():
 async def magnet_off():
     try:
         return {"status": "ok", "response": gcode.magnet_off()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/joystick/action", summary="[Finał] Pick/Place z aktualnej pozycji joysticka (z ochroną krawędzi)")
+async def joystick_action(req: JoystickActionRequest):
+    """
+    Wywietla pick lub place z aktualnej pozycji drukarki (gdzie stoi głowica po sterowaniu joystickiem).
+    
+    Backend sprawdza:
+    1. Czy głowica jest w obszarze siatki 8x8 (nie poza szachownicą)
+    2. Czy głowica jest wystarczająco blisko środka pola (±8mm tolerancja)
+    
+    Akcje:
+    - **pick** - Pobiera element (magnes ON, podnosi)
+    - **place** - Nakłada element (opuszcza, magnes OFF)
+    """
+    try:
+        result = gcode.joystick_action(req.action)
+        return result
+    except ValueError as e:
+        # Blokada bezpieczeństwa - głowica poza siatką lub zbyt daleko od środka pola
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

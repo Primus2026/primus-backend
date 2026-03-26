@@ -32,3 +32,6 @@ class PrinterStatusResponse(BaseModel):
     baudrate: Optional[int] = None
     limits: Optional[dict] = None
     position_raw: Optional[str] = None
+
+class JoystickActionRequest(BaseModel):
+    action: str = Field(..., description="'pick' lub 'place' - pobranie lub odlozenie z aktualnej pozycji joysticka")

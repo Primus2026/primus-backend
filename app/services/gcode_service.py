@@ -44,8 +44,8 @@ class GCodeService:
 
     # === OFFSET KAMERY WZGLĘDEM MAGNESU ===
     # Pozwala wycentrować kadr nad polem gry (Zadanie Kalibracyjne Osoby C)
-    CAMERA_OFFSET_X = -20.0  # Dodaj lub odejmij milimetry, np. -20
-    CAMERA_OFFSET_Y = 25.0  # Dodaj lub odejmij milimetry, np. +35
+    CAMERA_OFFSET_X = -18.0  # Dodaj lub odejmij milimetry, np. -20
+    CAMERA_OFFSET_Y = 0.0  # Dodaj lub odejmij milimetry, np. +35
 
     def __new__(cls):
         if cls._instance is None:
@@ -158,6 +158,32 @@ class GCodeService:
         return [self.send_command(cmd) for cmd in commands]
 
     # ──────────────────────────────────────────────
+    def _wait_for_position(self, target_x: float, target_y: float, target_z: float, tolerance: float = 0.5, timeout: float = 60.0):
+        """Pętla odpytująca drukarkę o aktualną pozycję (M114), blokująca kod do momentu osiągnięcia celu X,Y,Z."""
+        import re
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            resp = self.send_command("M114")
+            match_x = re.search(r'X:([-+]?\d*\.\d+|\d+)', resp)
+            match_y = re.search(r'Y:([-+]?\d*\.\d+|\d+)', resp)
+            match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
+            
+            if match_x and match_y and match_z:
+                curr_x = float(match_x.group(1))
+                curr_y = float(match_y.group(1))
+                curr_z = float(match_z.group(1))
+                
+                # Sprawdzamy czy głowica jest w sferze tolerancji
+                if (abs(curr_x - target_x) <= tolerance and
+                    abs(curr_y - target_y) <= tolerance and
+                    abs(curr_z - target_z) <= tolerance):
+                    return # Osiągnięto cel!
+                    
+            time.sleep(0.05) # Szybkie odpytywanie 20x na sekundę zamiast pół-sekundowych przerw
+            
+        logger.warning(f"Timeout oczekiwania na pozycję {target_x}, {target_y}, {target_z} (M114)")
+
+    # ──────────────────────────────────────────────
     #  LIMITATORY BEZPIECZEŃSTWA 
     # ──────────────────────────────────────────────
 
@@ -212,8 +238,10 @@ class GCodeService:
             self.send_command(f"G1 Z{z} F{self.SPEED_Z}")
             
         # 4. Magia wymuszająca CZEKANIE AŻ GŁOWICA FIZYCZNIE DOJDZIE DO CELU
-        # Bez tego Python szedł dalej a drukarka tylko buforowała X,Y
+        # Wiele firmware ignoruje blokadę M400 wymyśloną dla extruderów, więc twardo odpytujemy zamek (M114)
         self.send_command("M400", timeout=120.0)
+        
+        self._wait_for_position(x, y, z)
             
         return "Ruch wykonany"
 
@@ -331,7 +359,100 @@ class GCodeService:
             f"G1 X{dx} Y{dy} Z{dz} F{speed or self.SPEED_XY}",
             "G90",  # Powrót do trybu absolutnego
         ]
-        return "\n".join(self.send_commands(cmds))
+        res = "\n".join(self.send_commands(cmds))
+        
+        # Oczekiwanie na dojazd po Jogu 
+        if "curr_x" in locals():
+            self._wait_for_position(curr_x + dx, curr_y + dy, curr_z + dz)
+            
+        return res
+
+    # ──────────────────────────────────────────────
+    #  JOYSTICK ACTION (Pick/Place z aktualnej pozycji)
+    # ──────────────────────────────────────────────
+
+    def _get_current_position(self) -> tuple[float, float, float]:
+        """Odczytuje aktualne XYZ z M114. Zwraca (x, y, z) lub rzuca wyjątkiem."""
+        import re
+        resp = self.send_command("M114")
+        match_x = re.search(r'X:([-+]?\d*\.\d+|\d+)', resp)
+        match_y = re.search(r'Y:([-+]?\d*\.\d+|\d+)', resp)
+        match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
+        if not (match_x and match_y and match_z):
+            raise RuntimeError("Nie można odczytać pozycji z M114")
+        return float(match_x.group(1)), float(match_y.group(1)), float(match_z.group(1))
+
+    def _snap_to_nearest_grid(self, x: float, y: float) -> tuple[int, int]:
+        """
+        Na podstawie aktualnych XY odgaduje najbliższe pole siatki (col, row).
+        Rzuca wyjątek jeśli głowica jest poza polem gry lub zbyt blisko krawędzi.
+        """
+        # Oblicz względne pozycje od punktu początkowego siatki
+        rel_x = x - self.GRID_ORIGIN_X
+        rel_y = y - self.GRID_ORIGIN_Y
+        
+        # Zaokrąglenie do najbliższego pola
+        col = round(rel_x / self.CELL_SIZE) + 1
+        row = round(rel_y / self.CELL_SIZE) + 1
+        
+        # === WALIDACJA BEZPIECZEŃSTWA ===
+        # 1. Musi być w granicach siatki
+        if not (1 <= col <= 8 and 1 <= row <= 8):
+            raise ValueError(
+                f"BL0KADA: Głowica jest POZA siatką (col={col}, row={row}). "
+                f"Wróć joystickiem do obszaru szachownicy przed podniesieniem!"
+            )
+        
+        # 2. Sprawdzamy, czy jesteśmy wystarczająco blisko środka pola (tolerancja ±8mm)
+        expected_x = self.GRID_ORIGIN_X + (col - 1) * self.CELL_SIZE
+        expected_y = self.GRID_ORIGIN_Y + (row - 1) * self.CELL_SIZE
+        
+        if abs(x - expected_x) > 8.0 or abs(y - expected_y) > 8.0:
+            raise ValueError(
+                f"BLOKADA: Głowica jest zbyt daleko od środka pola ({col},{row}) "
+                f"(odchylenie: dx={abs(x-expected_x):.1f}mm, dy={abs(y-expected_y):.1f}mm). "
+                f"Wycentruj dokładnie nad polem przed podniesieniem!"
+            )
+        
+        return col, row
+
+    def joystick_action(self, action: str) -> dict:
+        """
+        Wykonuje pick lub place z AKTUALNEJ POZYCJI głowicy (sterowanej joystickiem).
+        Automatycznie sprawdza czy pozycja jest bezpieczna (na środku pola siatki).
+        """
+        if not self.is_connected:
+            raise ConnectionError("Drukarka nie podłączona")
+        
+        # 1. Odczytaj aktualną pozycję
+        curr_x, curr_y, curr_z = self._get_current_position()
+        logger.info(f"[Joystick Action] Aktualna pozycja: X={curr_x}, Y={curr_y}, Z={curr_z}")
+        
+        # 2. Sprawdź bezpieczeństwo i znajdź najbliższe pole siatki
+        col, row = self._snap_to_nearest_grid(curr_x, curr_y)
+        logger.info(f"[Joystick Action] Zidentyfikowane pole siatki: ({col}, {row})")
+        
+        # 3. Wykonaj akcję
+        if action == "pick":
+            result = self.pick_from_grid(col, row)
+            return {
+                "status": "ok",
+                "action": "pick",
+                "col": col, "row": row,
+                "message": f"Pobrano element z pola ({col}, {row})",
+                "response": result
+            }
+        elif action == "place":
+            result = self.place_on_grid(col, row)
+            return {
+                "status": "ok",
+                "action": "place",
+                "col": col, "row": row,
+                "message": f"Odlozono element na pole ({col}, {row})",
+                "response": result
+            }
+        else:
+            raise ValueError(f"Nieznana akcja: '{action}'. Użyj 'pick' lub 'place'.")
 
     # ──────────────────────────────────────────────
     #  STATUS
