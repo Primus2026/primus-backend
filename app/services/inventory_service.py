@@ -30,7 +30,7 @@ class InventoryService:
 
         # 2. Pętla inwentaryzacji (Wiersze 1-8, Kolumny 1-8)
         # Uwaga: w Twoim opisie rzędy 0-7 odpowiadają fizycznym 1-8
-        for row in range(1, 9):
+        for row in range(2, 9):
             # Optymalizacja trasy (snake pattern)
             # Jeśli wiersz jest parzysty, idź od 8 do 1, jeśli nieparzysty od 1 do 8
             columns = range(1, 9) if row % 2 != 0 else range(8, 0, -1)
@@ -41,7 +41,6 @@ class InventoryService:
                 # Ruch kamerą nad pole
                 gcode.move_camera_to_grid(col=col, row=row)
                 # Krótka pauza na stabilizację obrazu
-                await asyncio.sleep(0.1)
 
                 # Próba detekcji: QR -> Figura
                 detected_barcode = camera.decode_qr()

@@ -115,16 +115,16 @@ class StockService:
                 # 1. Weź górny element i odstaw go tymczasowo (lub trzymaj w chwytaku)
                 # Tu używamy Twojej logiki temp_R/temp_C jeśli chcesz go fizycznie odstawić
                 # Albo po prostu symulujemy procedurę:
-                gcode.pick_from_grid(col=C, row=R, level=1)
-                gcode.place_on_grid(col=2, row=2, level=0) # Miejsce techniczne
+                gcode.pick_from_grid(col=C+1, row=R+1, level="top")
+                gcode.place_on_grid(col=2, row=2, level="bottom") # Miejsce techniczne
                 
                 # 2. Wyciągnij dolny (docelowy) i daj na wyjście
-                gcode.pick_from_grid(col=C, row=R, level=0)
-                gcode.place_on_grid(col=2, row=1, level=0) # Wyjście
+                gcode.pick_from_grid(col=C+1, row=R+1, level="bottom")
+                gcode.place_on_grid(col=2, row=1, level="bottom") # Wyjście
                 
                 # 3. Odstaw górny z powrotem na to samo miejsce, ale teraz na poziom 0
-                gcode.pick_from_grid(col=2, row=2, level=0)
-                gcode.place_on_grid(col=C, row=R, level=0)
+                gcode.pick_from_grid(col=2, row=2, level="bottom")
+                gcode.place_on_grid(col=C+1, row=R+1, level="bottom")
 
                 # --- BAZA DANYCH ---
                 # KLUCZ: Najpierw usuwamy dolny, żeby zwolnić constraint y=0
@@ -138,8 +138,8 @@ class StockService:
                 # SCENARIUSZ B: Pojedynczy przedmiot (lub przedmiot był na y=1)
                 logger.info(f"Pojedyncze wydanie: [{R}, {C}, y={item_to_remove.y_position}]")
                 
-                gcode.pick_from_grid(col=C, row=R, level=item_to_remove.y_position)
-                gcode.place_on_grid(col=2, row=1, level=0)
+                gcode.pick_from_grid(col=C+1, row=R+1, level="bottom" if item_to_remove.y_position == 0 else "top")
+                gcode.place_on_grid(col=2, row=1, level="bottom")
                 
                 await db.delete(item_to_remove)
 
@@ -377,7 +377,6 @@ class StockService:
         # 1. Ruch kamery nad pole Inbound (Slot 1,1)
         # Zakładamy, że produkt leży fizycznie na polu 1,1 (współrzędne 0,0 w systemie 0-7)
         gcode.move_camera_to_grid(col=1, row=1)
-        await asyncio.sleep(0.1) # Czas na focus kamery
 
         # 2. Próba rozpoznania produktu
         barcode = camera.decode_qr()
@@ -413,12 +412,12 @@ class StockService:
             # Pobranie ze slotu 1,1 (Inbound)
             gcode.pick_from_grid(col=1, row=1, level="bottom")
             # # Odłożenie na miejsce docelowe
-            gcode.place_on_grid(col=allocation.col, row=allocation.row, level=allocation.y_position)
+            gcode.place_on_grid(col=allocation.col+1, row=allocation.row+1, level="bottom" if allocation.y_position == 0 else 1)
         except Exception as e:
             logger.error(f"G-Code Error: {e}")
             raise HTTPException(status_code=500, detail=f"Błąd mechaniczny drukarki: {str(e)}")
 
-        # 6. Zapis do bazy danych
+    # 6. Zapis do bazy danych
         stock_item = StockItem(
             rack_id=allocation.rack_id,
             position_row=allocation.row,
