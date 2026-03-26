@@ -64,6 +64,13 @@ class Settings(BaseSettings):
 
     EXPECTED_CHANGE_TTL: int = 300  # 5 minutes in seconds, controls how long the expected change flag is stored in redis
    
+    # 3D Printer (Magazyn) Settings
+    SERIAL_PORT: str = "/dev/ttyUSB0"
+    SERIAL_BAUDRATE: int = 250000
+    
+    # Camera Settings
+    CAMERA_INDEX: int = 0
+    
     BACKUP_ENCRYPTION_KEY: str = "XkkN_G-SZUEXzcULZhD3b8w3noM2q_Vt4xBQxmsBDSU="
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -75,7 +82,8 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         if self.ENVIRONMENT == "production":
             self.ENABLE_DOCS = False
-
+        else:
+            self.ENABLE_DOCS = True
 
 
 settings = Settings()

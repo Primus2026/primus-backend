@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
 # Stage 2: Backend Runtime
 FROM python:3.11-slim as backend
 WORKDIR /app
-RUN apt-get update && apt-get install -y fonts-dejavu postgresql-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y fonts-dejavu postgresql-client libzbar0 libsm6 libxext6 libgl1 && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1000 appuser && useradd -r -u 1000 -g appuser appuser
 COPY --from=builder --chown=appuser:appuser /app/.venv-backend /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
