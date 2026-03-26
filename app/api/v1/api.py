@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, users, rack_CRUD, product_definition_CRUD, 
     reports, stock_outbound, ai, stock, stock_inbound, 
-    alerts, backups, voice, camera, gcode, joystick
+    alerts, backups, voice, camera, gcode, joystick, qr_generator
 )
 
 api_router = APIRouter()
@@ -25,5 +25,6 @@ api_router.include_router(backups.router, prefix="/backups", tags=["backups"])
 api_router.include_router(camera.router, prefix="/camera", tags=["Camera"])
 api_router.include_router(gcode.router, prefix="/gcode", tags=["G-code Printer"])
 api_router.include_router(joystick.router, prefix="/joystick", tags=["ESP32S3 Matrix Joystick"])
+api_router.include_router(qr_generator.router, prefix="/qr_generator", tags=["QR Generator"])
 
 

@@ -45,7 +45,17 @@ async def strip_trailing_slash(request: Request, call_next):
     return response
 
 
-origins = ["*"] # will be updated later
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "https://localhost:8443",
+    "https://localhost:443",
+    "https://localhost",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
+] # Add more origins as needed
 
 app.add_middleware(
     CORSMiddleware,
