@@ -111,25 +111,44 @@ class StockService:
                 # SCENARIUSZ A: Podwójne składowanie (zdejmujemy dół, góra zostaje)
                 logger.info(f"Odkrywamy dół: [{R}, {C}, y=0] wyjeżdża, [{R}, {C}, y=1] spada na y=0.")
 
+                # --- ZNAJDŹ NAJBLIŻSZY WOLNY SLOT NA TYMCZASOWE ODSTAWIENIE ---
+                occupied_slots_stmt = select(StockItem.position_row, StockItem.position_col).where(StockItem.rack_id == rack.id)
+                occupied_res = await db.execute(occupied_slots_stmt)
+                occupied = set(occupied_res.fetchall())
+                
+                free_slots = []
+                for candidate_r in range(1, 8):
+                    for candidate_c in range(1, 9):
+                        if (candidate_r, candidate_c) not in occupied and (candidate_r != R or candidate_c != C):
+                            # Liczymy dystans (Manhattan) dla szybkości
+                            dist = abs(candidate_r - R) + abs(candidate_c - C)
+                            free_slots.append((candidate_r, candidate_c, dist))
+                
+                if not free_slots:
+                    raise HTTPException(status_code=400, detail="Brak wolnego miejsca w magazynie!")
+
+                # Sortuj wg dystansu (najbliższe najpierw)
+                free_slots.sort(key=lambda x: x[2])
+                temp_R, temp_C, _ = free_slots[0]
+
+                logger.info(f"Najbliższe wolne miejsce: DB row={temp_R}, col={temp_C} (Dystans: {abs(temp_R-R)+abs(temp_C-C)})")
+
                 # --- ROBOTYKA (G-Code) ---
-                # 1. Weź górny element i odstaw go tymczasowo (lub trzymaj w chwytaku)
-                # Tu używamy Twojej logiki temp_R/temp_C jeśli chcesz go fizycznie odstawić
-                # Albo po prostu symulujemy procedurę:
-                gcode.pick_from_grid(col=C+1, row=R+1, level="top")
-                gcode.place_on_grid(col=2, row=2, level="bottom") # Miejsce techniczne
+                # 1. Weź górny element i odstaw go na wolne miejsce
+                gcode.pick_from_grid(col=C, row=R+1, level="top")
+                gcode.place_on_grid(col=temp_C, row=temp_R+1, level="bottom")
                 
-                # 2. Wyciągnij dolny (docelowy) i daj na wyjście
-                gcode.pick_from_grid(col=C+1, row=R+1, level="bottom")
-                gcode.place_on_grid(col=2, row=1, level="bottom") # Wyjście
+                # 2. Wyciągnij dolny (docelowy) i daj na wyjście (fizyczny R1 C2 - Outbound)
+                gcode.pick_from_grid(col=C, row=R+1, level="bottom")
+                gcode.place_on_grid(col=2, row=1, level="bottom")
                 
-                # 3. Odstaw górny z powrotem na to samo miejsce, ale teraz na poziom 0
-                gcode.pick_from_grid(col=2, row=2, level="bottom")
-                gcode.place_on_grid(col=C+1, row=R+1, level="bottom")
+                # 3. Odstaw górny z powrotem na to samo miejsce (ale teraz na poziom 0)
+                gcode.pick_from_grid(col=temp_C, row=temp_R+1, level="bottom")
+                gcode.place_on_grid(col=C, row=R+1, level="bottom")
 
                 # --- BAZA DANYCH ---
-                # KLUCZ: Najpierw usuwamy dolny, żeby zwolnić constraint y=0
                 await db.delete(item_to_remove)
-                await db.flush() # Wysyła DELETE do bazy, ale nie kończy transakcji
+                await db.flush() 
 
                 # Teraz możemy bezpiecznie zmienić y_position górnego na 0
                 top_item.y_position = 0
@@ -138,7 +157,7 @@ class StockService:
                 # SCENARIUSZ B: Pojedynczy przedmiot (lub przedmiot był na y=1)
                 logger.info(f"Pojedyncze wydanie: [{R}, {C}, y={item_to_remove.y_position}]")
                 
-                gcode.pick_from_grid(col=C+1, row=R+1, level="bottom" if item_to_remove.y_position == 0 else "top")
+                gcode.pick_from_grid(col=C, row=R+1, level="bottom" if item_to_remove.y_position == 0 else "top")
                 gcode.place_on_grid(col=2, row=1, level="bottom")
                 
                 await db.delete(item_to_remove)
@@ -411,8 +430,8 @@ class StockService:
         try:
             # Pobranie ze slotu 1,1 (Inbound)
             gcode.pick_from_grid(col=1, row=1, level="bottom")
-            # # Odłożenie na miejsce docelowe
-            gcode.place_on_grid(col=allocation.col+1, row=allocation.row+1, level="bottom" if allocation.y_position == 0 else 1)
+            # Odłożenie na miejsce docelowe (R_fiz = R_db + 1 | C_fiz = C_db)
+            gcode.place_on_grid(col=allocation.col, row=allocation.row+1, level="bottom" if allocation.y_position == 0 else "top")
         except Exception as e:
             logger.error(f"G-Code Error: {e}")
             raise HTTPException(status_code=500, detail=f"Błąd mechaniczny drukarki: {str(e)}")

@@ -96,7 +96,8 @@ class InventoryService:
     @staticmethod
     async def run_full_inventory(db: AsyncSession, user_id: int):
         """
-        Przeprowadza pełną inwentaryzację 8x8 na drukarce PRINTER_3D.
+        Przeprowadza pełną inwentaryzację rzędów magazynowych 2-8 na drukarce PRINTER_3D.
+        Rząd 1 jest zarezerwowany na INBOUND/OUTBOUND.
         """
         # 1. Pobierz lub sprawdź regał PRINTER_3D
         result = await db.execute(select(Rack).where(Rack.designation == "PRINTER_3D"))
@@ -108,11 +109,9 @@ class InventoryService:
         # Home drukarki przed startem
         gcode.home()
 
-        # 2. Pętla inwentaryzacji (Wiersze 1-8, Kolumny 1-8)
-        # Uwaga: w Twoim opisie rzędy 0-7 odpowiadają fizycznym 1-8
+        # 2. Pętla inwentaryzacji (Wiersze fizyczne 2-8)
         for row in range(2, 9):
             # Optymalizacja trasy (snake pattern)
-            # Jeśli wiersz jest parzysty, idź od 8 do 1, jeśli nieparzysty od 1 do 8
             columns = range(1, 9) if row % 2 != 0 else range(8, 0, -1)
             
             for col in columns:
@@ -120,7 +119,7 @@ class InventoryService:
                 
                 # Ruch kamerą nad pole
                 gcode.move_camera_to_grid(col=col, row=row)
-                # Krótka pauza na stabilizację obrazu
+                await asyncio.sleep(0.5) # Krótka pauza na stabilizację kamery
 
                 # Próba detekcji: QR -> Figura
                 detected_barcode = camera.decode_qr()
@@ -132,14 +131,19 @@ class InventoryService:
                     await InventoryService._handle_found_item(
                         db, rack.id, row, col, detected_barcode, user_id
                     )
+                else:
+                    # PUSTE POLE
+                    await InventoryService._handle_empty_slot(db, rack.id, row, col)
+                
+                # WYMUSZENIE SYNCHRONIZACJI Z BAZĄ
+                await db.flush()
 
         await db.commit()
-        return {"status": "success", "message": "Inwentaryzacja zakończona"}
+        return {"status": "success", "message": "Inwentaryzacja rzędów 2-8 zakończona"}
 
     @staticmethod
     async def _handle_found_item(db: AsyncSession, rack_id: int, row: int, col: int, barcode: str, user_id: int):
-        """Aktualizuje bazę, jeśli wykryto produkt."""
-        # Pobierz definicję produktu po barcode (np. 'WC', 'HB')
+        """Aktualizuje bazę. Przyjmuje row(2-8), col(1-8). Zapisuje DB_row(1-7), DB_col(1-8)."""
         prod_result = await db.execute(
             select(ProductDefinition).where(ProductDefinition.barcode == barcode)
         )
@@ -149,32 +153,43 @@ class InventoryService:
             logger.warning(f"Wykryto kod {barcode}, ale nie ma takiej definicji w bazie.")
             return
 
-        # Sprawdź czy na tym miejscu już coś jest
+        # KONWENCJA: DB Row = Physical Row - 1 | DB Col = Physical Col
+        db_row, db_col = row - 1, col
         existing_stmt = select(StockItem).where(
             StockItem.rack_id == rack_id,
-            StockItem.position_row == row,
-            StockItem.position_col == col,
+            StockItem.position_row == db_row,
+            StockItem.position_col == db_col,
             StockItem.y_position == 0
         )
         existing_item = (await db.execute(existing_stmt)).scalars().first()
 
         if existing_item:
             if existing_item.product_id == product.id:
-                # Produkt się zgadza, nic nie rób
                 return
             else:
-                # Inny produkt na tym miejscu - usuń stary
                 await db.delete(existing_item)
 
-        # Dodaj nowy StockItem (Inwentaryzacja fizyczna nadpisuje system)
         new_item = StockItem(
             product_id=product.id,
             rack_id=rack_id,
-            position_row=row,
-            position_col=col,
+            position_row=db_row,
+            position_col=db_col,
             y_position=0,
             received_by_id=user_id,
-            expiry_date=datetime.now() # Możesz tu wyliczyć z expiry_days
+            expiry_date=datetime.now()
         )
         db.add(new_item)
-        logger.info(f"Zaktualizowano: {barcode} na R{row} C{col}")
+        logger.info(f"Zaktualizowano: {barcode} na R{row} C{col} (DB: row={db_row}, col={db_col})")
+
+    @staticmethod
+    async def _handle_empty_slot(db: AsyncSession, rack_id: int, row: int, col: int):
+        """Usuwa z bazy. Przyjmuje fizyczne row, col. Szuka w DB row-1, col."""
+        db_row, db_col = row - 1, col
+        stmt = delete(StockItem).where(
+            StockItem.rack_id == rack_id,
+            StockItem.position_row == db_row,
+            StockItem.position_col == db_col
+        )
+        result = await db.execute(stmt)
+        if result.rowcount > 0:
+            logger.info(f"Usunięto nieistniejący fizycznie przedmiot z R{row} C{col} (DB: {db_row},{db_col})")

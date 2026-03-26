@@ -104,11 +104,14 @@ class AllocationService:
                 if occ_y == 0:
                     grid_state[(occ_row, occ_col)]['product_id_at_0'] = occ_prod_id
                     
-            # Iterujemy po magazynie (wyłączamy rzad 1)
-            for r in range(2, rack.rows_m + 1):
-                for c in range(1, rack.cols_n + 1):
+            # Iterujemy po magazynie (RZĘDY DB: 1-7 -> Fizyczne: 2-8)
+            for r in range(1, 8):
+                for c in range(1, 9):
                     state = grid_state.get((r, c), {'max_y': -1, 'product_id_at_0': None})
-                    dist = abs(r - 1) + abs(c - 2) # Dystans do "01" (row=1, col=2)
+                    # Dystans do slotu Inbound (fizyczny 1,1 -> DB: r=0, c=1, ale r wejsciowe to r-1?)
+                    # Skoro Inbound to fizyczny r1 c1, a magazyn r2, to dystans od (0,1)?
+                    # Uprośćmy: dystans do (0,1) w kordach DB.
+                    dist = abs(r - 0) + abs(c - 1)
                     
                     if state['max_y'] == -1: # Puste pole
                         possible_placements.append({"rack": rack, "row": r, "col": c, "y_position": 0, "dist": dist, "is_stack": False})

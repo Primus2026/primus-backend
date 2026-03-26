@@ -76,10 +76,10 @@ class ChessService:
                 
                 # FIZYCZNY RUCH
                 try:
-                    # Podnieś z obecnej pozycji (level 0, bo zakładamy jedną warstwę)
-                    gcode.pick_from_grid(col=curr_col, row=curr_row, level=0)
+                    # Podnieś z obecnej pozycji (level="bottom", bo zakładamy jedną warstwę)
+                    gcode.pick_from_grid(col=curr_col, row=curr_row, level="bottom")
                     # Odłóż na docelową pozycję
-                    gcode.place_on_grid(col=target_col, row=target_row, level=0)
+                    gcode.place_on_grid(col=target_col, row=target_row, level="bottom")
                 except Exception as e:
                     logger.error(f"Błąd G-Code: {e}")
                     continue
