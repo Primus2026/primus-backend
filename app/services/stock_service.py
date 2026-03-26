@@ -1,5 +1,6 @@
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 from datetime import datetime
 from app.schemas.stock import RackLocation, RackLocationManual, ProductStockGroup
 from app.database.models.stock_item import StockItem
@@ -16,6 +17,11 @@ from app.database.models.rack import Rack
 import logging
 import json
 from app.services.product_stats_service import ProductStatsService
+from datetime import datetime, timedelta
+from app.services.camera_service import camera
+from app.services.gcode_service import gcode
+from app.services.allocation_service import AllocationService
+
 
 logger = logging.getLogger("STOCK_SERVICE")
 
@@ -358,4 +364,90 @@ class StockService:
         # Update product stats
         await ProductStatsService.update_product_stats(db, stock_item.product_id, 1, redis_client)
         
-        return Msg(message="Produkt został usunięty pomyślnie")        
+        return Msg(message="Produkt został usunięty pomyślnie")      
+
+    @staticmethod
+    async def auto_inbound_process(db: AsyncSession, user: User, redis_client: Redis):
+        """
+        Automatyczne przyjęcie: 
+        1. Podjazd nad pole Inbound (1,1).
+        2. Rozpoznanie QR/Piktogramu.
+        3. Alokacja i fizyczne odłożenie.
+        """
+        # 1. Ruch kamery nad pole Inbound (Slot 1,1)
+        # Zakładamy, że produkt leży fizycznie na polu 1,1 (współrzędne 0,0 w systemie 0-7)
+        gcode.move_camera_to_grid(col=1, row=1)
+        await asyncio.sleep(0.8) # Czas na focus kamery
+
+        # 2. Próba rozpoznania produktu
+        barcode = camera.decode_qr()
+        if not barcode:
+            barcode = camera.recognize_pictogram()
+            
+        if not barcode:
+            raise HTTPException(
+                status_code=404, 
+                detail="Nie wykryto żadnego produktu (QR ani piktogramu) na polu Inbound."
+            )
+
+        logger.info(f"Auto-Inbound wykrył produkt: {barcode}")
+
+        # 3. Wykorzystanie logiki Alokacji (znalezienie miejsca)
+        allocation = await AllocationService.allocate_item(
+            db=db,
+            barcode=barcode,
+            user=user,
+            redis_client=redis_client
+        )
+
+        # 4. Pobranie definicji produktu
+        stmt = select(ProductDefinition).where(ProductDefinition.barcode == barcode)
+        result = await db.execute(stmt)
+        product = result.scalars().first()
+        
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Wykryto {barcode}, ale brak definicji w bazie.")
+
+        # 5. Fizyczny ruch (Pick & Place)
+        try:
+            pass
+            # Pobranie ze slotu 1,1 (Inbound)
+            # gcode.pick_from_grid(col=1, row=1, level=0)
+            # # Odłożenie na miejsce docelowe
+            # gcode.place_on_grid(col=allocation.col, row=allocation.row, level=allocation.y_position)
+        except Exception as e:
+            logger.error(f"G-Code Error: {e}")
+            raise HTTPException(status_code=500, detail=f"Błąd mechaniczny drukarki: {str(e)}")
+
+        # 6. Zapis do bazy danych
+        stock_item = StockItem(
+            rack_id=allocation.rack_id,
+            position_row=allocation.row,
+            position_col=allocation.col,
+            y_position=allocation.y_position,
+            product_id=product.id,
+            entry_date=datetime.now(),
+            expiry_date=(datetime.now() + timedelta(days=product.expiry_days)).date(),
+            received_by_id=user.id
+        )
+        
+        db.add(stock_item)
+        await db.commit()
+        await db.refresh(stock_item, ["product", "receiver"])
+        
+        # AKTUALIZACJA REDIS (zostaje bez zmian)
+        await redis_client.hincrby(f"Rack:{allocation.rack_designation}", "weight_kg", int(product.weight_kg))
+        await redis_client.set(f"Weight:{allocation.rack_designation}:{allocation.row}:{allocation.col}", product.weight_kg)
+        
+        # POPRAWKA TUTAJ: Mapujemy 'receiver' na 'received_by'
+        return {
+            "id": stock_item.id,
+            "product": stock_item.product,
+            "rack_id": stock_item.rack_id,
+            "position_row": stock_item.position_row,
+            "position_col": stock_item.position_col,
+            "y_position": stock_item.y_position,
+            "entry_date": stock_item.entry_date,
+            "expiry_date": stock_item.expiry_date,
+            "received_by": stock_item.receiver  # Mapujemy relację na pole oczekiwane przez schemat
+        } 

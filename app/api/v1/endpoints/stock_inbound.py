@@ -11,6 +11,7 @@ from app.database.models.stock_item import StockItem
 from app.database.models.product_definition import ProductDefinition
 from sqlalchemy import select
 from datetime import datetime, timedelta
+from app.services.stock_service import StockService
 
 router = APIRouter()
 
@@ -80,3 +81,14 @@ async def direct_add_stock_item(
         expiry_date=stock_item.expiry_date,
         received_by=stock_item.receiver
     )
+
+@router.post("/auto-inbound", response_model=StockOut, status_code=201)
+async def auto_inbound_endpoint(
+    db: AsyncSession = Depends(deps.get_db),
+    user: User = Depends(deps.get_current_user),
+    redis_client: Redis = Depends(deps.get_redis)
+):
+    """
+    Uruchamia proces automatycznego skanowania pola Inbound i odkładania produktu.
+    """
+    return await StockService.auto_inbound_process(db, user, redis_client)
