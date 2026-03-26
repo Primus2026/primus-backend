@@ -9,5 +9,6 @@ class AllocationResponse(BaseModel):
     rack_designation: str
     row: int
     col: int
+    y_position: int
 
     model_config = ConfigDict(from_attributes=True)

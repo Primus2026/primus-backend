@@ -31,6 +31,20 @@ async def outbound_stock_item_initiate(
     """
     return await StockService.outbound_stock_item_initiate(barcode, user, redis_client, db)
     
+
+@router.post("/direct-remove/{barcode}", response_model=Msg)
+async def direct_remove_stock_item(
+    barcode: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(deps.get_current_user),
+    redis_client: Redis = Depends(deps.get_redis),
+):
+    """
+    Wydanie towaru w jednym kroku (Z wymogiem FIFO i ewentualną relokacją elementów piętrowych).
+    Fizyczne sterowanie robotem zdejmuje towar na strefę wyjściową.
+    """
+    return await StockService.direct_remove(barcode, user, redis_client, db)
+
 @router.post("/confirm", responses={
     404: {"description": "Stock item not found"},
     403: {"description": "You are not authorized to confirm this outbound process"},

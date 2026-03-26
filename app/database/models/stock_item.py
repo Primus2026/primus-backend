@@ -13,6 +13,7 @@ class StockItem(Base):
     rack_id: Mapped[int] = mapped_column(Integer, ForeignKey("racks.id"))
     position_row: Mapped[int] = mapped_column(Integer)
     position_col: Mapped[int] = mapped_column(Integer)
+    y_position: Mapped[int] = mapped_column(Integer, default=0)
     entry_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expiry_date: Mapped[date] = mapped_column(DateTime(timezone=True))
     received_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
@@ -22,5 +23,5 @@ class StockItem(Base):
     receiver = relationship("User")
 
     __table_args__ = (
-        UniqueConstraint('rack_id', 'position_row', 'position_col', name='unique_rack_position'),
+        UniqueConstraint('rack_id', 'position_row', 'position_col', 'y_position', name='unique_rack_position'),
     )
