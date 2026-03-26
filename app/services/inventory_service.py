@@ -131,9 +131,6 @@ class InventoryService:
                     await InventoryService._handle_found_item(
                         db, rack.id, row, col, detected_barcode, user_id
                     )
-                else:
-                    # PUSTE POLE
-                    await InventoryService._handle_empty_slot(db, rack.id, row, col)
                 
                 # WYMUSZENIE SYNCHRONIZACJI Z BAZĄ
                 await db.flush()
@@ -180,16 +177,3 @@ class InventoryService:
         )
         db.add(new_item)
         logger.info(f"Zaktualizowano: {barcode} na R{row} C{col} (DB: row={db_row}, col={db_col})")
-
-    @staticmethod
-    async def _handle_empty_slot(db: AsyncSession, rack_id: int, row: int, col: int):
-        """Usuwa z bazy. Przyjmuje fizyczne row, col. Szuka w DB row-1, col."""
-        db_row, db_col = row - 1, col
-        stmt = delete(StockItem).where(
-            StockItem.rack_id == rack_id,
-            StockItem.position_row == db_row,
-            StockItem.position_col == db_col
-        )
-        result = await db.execute(stmt)
-        if result.rowcount > 0:
-            logger.info(f"Usunięto nieistniejący fizycznie przedmiot z R{row} C{col} (DB: {db_row},{db_col})")
