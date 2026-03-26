@@ -45,10 +45,17 @@ async def move(req: MoveRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/move-to-grid", summary="[Finał] Dojazd nad konkretne pole(1-8, 1-8) by zrobić zdjęcie")
+@router.post("/move-to-grid", summary="[Finał] Dojazd magnesem nad konkretne pole(1-8, 1-8)")
 async def move_to_grid(req: GridPositionRequest):
     try:
         return {"status": "ok", "response": gcode.move_to_grid(req.col, req.row)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/move-camera-to-grid", summary="[Finał] Dojazd kamerą nad konkretne pole(1-8, 1-8) z uwzględnieniem offsetu")
+async def move_camera_to_grid(req: GridPositionRequest):
+    try:
+        return {"status": "ok", "response": gcode.move_camera_to_grid(req.col, req.row)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

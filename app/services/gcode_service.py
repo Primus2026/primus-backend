@@ -42,6 +42,11 @@ class GCodeService:
     GRID_ORIGIN_Y = 31.0
     CELL_SIZE = 30.0        # Odległość między środkami sąsiednich pól
 
+    # === OFFSET KAMERY WZGLĘDEM MAGNESU ===
+    # Pozwala wycentrować kadr nad polem gry (Zadanie Kalibracyjne Osoby C)
+    CAMERA_OFFSET_X = -20.0  # Dodaj lub odejmij milimetry, np. -20
+    CAMERA_OFFSET_Y = 25.0  # Dodaj lub odejmij milimetry, np. +35
+
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
@@ -206,6 +211,10 @@ class GCodeService:
         if z != self.Z_SAFE:
             self.send_command(f"G1 Z{z} F{self.SPEED_Z}")
             
+        # 4. Magia wymuszająca CZEKANIE AŻ GŁOWICA FIZYCZNIE DOJDZIE DO CELU
+        # Bez tego Python szedł dalej a drukarka tylko buforowała X,Y
+        self.send_command("M400", timeout=120.0)
+            
         return "Ruch wykonany"
 
     def magnet_on(self) -> str:
@@ -260,9 +269,21 @@ class GCodeService:
         return x, y
 
     def move_to_grid(self, col: int, row: int) -> str:
-        """Podjedź nad zadane pole siatki (na wys. Z_SAFE) aby zrobić np. zdjęcie."""
+        """Podjedź głowicą elektromagnesu nad zadane pole siatki (na wys. Z_SAFE)."""
         x, y = self.grid_to_xy(col, row)
         return self.move_to(x, y, self.Z_SAFE)
+
+    def move_camera_to_grid(self, col: int, row: int) -> str:
+        """Podjedź kamerą nad zadane pole siatki uwzględniając offset fizyczny montażu."""
+        x, y = self.grid_to_xy(col, row)
+        cam_x = x + self.CAMERA_OFFSET_X
+        cam_y = y + self.CAMERA_OFFSET_Y
+        
+        # Ochrona przed wyjazdem poza ramę maszyny
+        cam_x = max(self.SAFE_X_MIN, min(self.SAFE_X_MAX, cam_x))
+        cam_y = max(self.SAFE_Y_MIN, min(self.SAFE_Y_MAX, cam_y))
+        
+        return self.move_to(cam_x, cam_y, self.Z_SAFE)
 
     def pick_from_grid(self, col: int, row: int, level: str = "bottom") -> str:
         x, y = self.grid_to_xy(col, row)
