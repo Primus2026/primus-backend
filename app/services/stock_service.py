@@ -63,6 +63,100 @@ class StockService:
         )
 
     @staticmethod
+    async def direct_remove(barcode: str, user: User, redis_client: Redis, db: AsyncSession):
+        from app.services.gcode_service import gcode
+        
+        # 1. Znalezienie fizycznie najstarszego (FIFO) przedmiotu tego kodu
+        stmt = (
+            select(StockItem)
+            .options(selectinload(StockItem.rack))
+            .join(ProductDefinition)
+            .where(ProductDefinition.barcode == barcode)
+            .order_by(StockItem.entry_date.asc())
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        item_to_remove = result.scalars().first()
+        
+        if not item_to_remove:
+            raise HTTPException(status_code=404, detail="Produkt nie został znaleziony")
+            
+        product_id = item_to_remove.product_id
+        rack = item_to_remove.rack
+        R = item_to_remove.position_row
+        C = item_to_remove.position_col
+        
+        # 2. Sprawdzenie, czy ten konkretny przedmiot ma coś na sobie (y_position == 1 na tej samej kratce)
+        # UWAGA: Szukamy tylko na tym samym regale i w tej samej kolumnie/wierszu, ale poziom wyżej
+        stmt_top = (
+            select(StockItem)
+            .where(
+                StockItem.rack_id == rack.id,
+                StockItem.position_row == R,
+                StockItem.position_col == C,
+                StockItem.y_position == 1
+            )
+        )
+        result_top = await db.execute(stmt_top)
+        top_item = result_top.scalars().first()
+            
+        try:
+            if top_item:
+                # SCENARIUSZ A: Podwójne składowanie (zdejmujemy dół, góra zostaje)
+                logger.info(f"Odkrywamy dół: [{R}, {C}, y=0] wyjeżdża, [{R}, {C}, y=1] spada na y=0.")
+
+                # --- ROBOTYKA (G-Code) ---
+                # 1. Weź górny element i odstaw go tymczasowo (lub trzymaj w chwytaku)
+                # Tu używamy Twojej logiki temp_R/temp_C jeśli chcesz go fizycznie odstawić
+                # Albo po prostu symulujemy procedurę:
+                gcode.pick_from_grid(col=C, row=R, level=1)
+                gcode.place_on_grid(col=2, row=2, level=0) # Miejsce techniczne
+                
+                # 2. Wyciągnij dolny (docelowy) i daj na wyjście
+                gcode.pick_from_grid(col=C, row=R, level=0)
+                gcode.place_on_grid(col=2, row=1, level=0) # Wyjście
+                
+                # 3. Odstaw górny z powrotem na to samo miejsce, ale teraz na poziom 0
+                gcode.pick_from_grid(col=2, row=2, level=0)
+                gcode.place_on_grid(col=C, row=R, level=0)
+
+                # --- BAZA DANYCH ---
+                # KLUCZ: Najpierw usuwamy dolny, żeby zwolnić constraint y=0
+                await db.delete(item_to_remove)
+                await db.flush() # Wysyła DELETE do bazy, ale nie kończy transakcji
+
+                # Teraz możemy bezpiecznie zmienić y_position górnego na 0
+                top_item.y_position = 0
+                
+            else:
+                # SCENARIUSZ B: Pojedynczy przedmiot (lub przedmiot był na y=1)
+                logger.info(f"Pojedyncze wydanie: [{R}, {C}, y={item_to_remove.y_position}]")
+                
+                gcode.pick_from_grid(col=C, row=R, level=item_to_remove.y_position)
+                gcode.place_on_grid(col=2, row=1, level=0)
+                
+                await db.delete(item_to_remove)
+
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"G-Code Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Błąd operacji: {str(e)}")
+            
+        # 5. Finalizacja
+        await db.commit()
+        
+        # Statystyki i Redis
+        await ProductStatsService.update_product_stats(db, product_id, 1, redis_client)
+        
+        # Pobranie wagi do aktualizacji Redisa
+        stmt_prod = select(ProductDefinition.weight_kg).where(ProductDefinition.id == product_id)
+        prod_weight = (await db.execute(stmt_prod)).scalar_one()
+        
+        await redis_client.hincrby(f"Rack:{rack.designation}", "weight_kg", int(-prod_weight))
+        await redis_client.delete(f"Weight:{rack.designation}:{R}:{C}")
+        
+        return Msg(message="Produkt wydany. Element nadrzędny został przesunięty na poziom 0.")
+    @staticmethod
     async def outbound_stock_item_confirm(
         rack_location: RackLocation, user: User, redis_client: Redis, db: AsyncSession
     ):

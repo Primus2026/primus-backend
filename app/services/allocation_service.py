@@ -51,31 +51,22 @@ class AllocationService:
             overlap_max = min(rack.temp_max, product.req_temp_max)
 
             if (overlap_max - overlap_min) < SAFE_BUFFER:
-                logger.info(f"Rack {rack.designation} temperature overlap too small or non-existent")
                 continue
                 
-            # Dimensions check (Product fits in slot)
             if not (product.dims_x_mm <= rack.max_dims_x_mm and 
                     product.dims_y_mm <= rack.max_dims_y_mm and
                     product.dims_z_mm <= rack.max_dims_z_mm):
-                logger.info(f"Dimensions check failed for rack {rack.designation}")
                 continue
             
-            # Single item weight check (Optimization: if item itself is heavier than rack limit)
             if product.weight_kg > rack.max_weight_kg:
-                logger.info(f"Weight check failed for rack {rack.designation}")
                 continue
 
-            # Need to check for available slots? 
-            # We will defer "is full" check to the slot finding step or optimize.
             pre_candidate_racks.append(rack)
-        print([r.designation for r in pre_candidate_racks])
+            
         if not pre_candidate_racks:
             raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych")
             
-        # Bulk fetch current weights for pre-candidates
         candidate_ids = [r.id for r in pre_candidate_racks]
-        logger.info(f"Pre-candidate racks: {candidate_ids}")
         
         weight_stmt = (
             select(StockItem.rack_id, func.sum(ProductDefinition.weight_kg))
@@ -84,262 +75,68 @@ class AllocationService:
             .group_by(StockItem.rack_id)
         )
         weight_result = await db.execute(weight_stmt)
-        # Map rack_id -> current_weight
         current_weights = {row[0]: row[1] or 0.0 for row in weight_result.all()}
-        logger.info(f"Current weights checks: {current_weights}")
         
         candidate_racks = []
         for rack in pre_candidate_racks:
             current_load = current_weights.get(rack.id, 0.0)
-            logger.info(f"Rack {rack.designation} (ID: {rack.id}): Load {current_load} + Item {product.weight_kg} <= Max {rack.max_weight_kg}")
             if current_load + product.weight_kg <= rack.max_weight_kg:
                 candidate_racks.append(rack)
-            else:
-                logger.warning(f"Rack {rack.designation} rejected by weight limit")
                 
         if not candidate_racks:
-             logger.error("No candidate racks found after weight check")
-             raise HTTPException(status_code=400, detail="Nie znaleziono regałów spełniających wymagań fizycznych (limit wagowy został osiągnięty)")
+             raise HTTPException(status_code=400, detail="Limit wagowy regału osiągnięty")
 
-        # 4. Strategy Selection based on Frequency Class
-        sorted_racks = []
+        # 4. Znajdź wszystkie możliwe miejsca we wszystkich pasujących regałach
+        possible_placements = []
         
-        if product.frequency_class == FrequencyClass.A:
-            # Shortest distance from exit
-            sorted_racks = sorted(candidate_racks, key=lambda r: r.distance_from_exit_m or float('inf'))
-            
-        elif product.frequency_class == FrequencyClass.C:
-            # Farthest distance from exit (descending)
-            sorted_racks = sorted(candidate_racks, key=lambda r: r.distance_from_exit_m or 0, reverse=True)
-            
-        elif product.frequency_class == FrequencyClass.B:
-            # Median distance logic
-            distances = [r.distance_from_exit_m for r in candidate_racks if r.distance_from_exit_m is not None]
-            if not distances:
-                 sorted_racks = candidate_racks
-            else:
-                distances.sort()
-                median = distances[len(distances) // 2]
-                
-                # Filter racks in range [median-10, median+10]
-                # Then sort by deviation from median
-                in_range = [r for r in candidate_racks if r.distance_from_exit_m is not None and (median - 10 <= r.distance_from_exit_m <= median + 10)]
-                
-                if not in_range:
-                     # Fallback if no racks in optimal range? 
-                     # Image says: "Filter racks with median from range... -> If slots available? -> No -> Search nearest to median"
-                     sorted_racks = sorted(candidate_racks, key=lambda r: abs((r.distance_from_exit_m or 0) - median))
-                else:
-                     sorted_racks = sorted(in_range, key=lambda r: abs((r.distance_from_exit_m or 0) - median))
-
-        # 5. Tie-breaking and Allocation
-        # The flowchart implies checking "If > 1 rack meets requirement -> Filter by racks containing same barcode"
-        # We will iterate through our sorted preference list.
-        # For each rack, try to find a slot.
-        
-        # Optimization: Prioritize racks that already have this product?
-        # Image logic: "Find rack with largest amount of same barcodes".
-        # This implies we should group candidate racks by "has barcode" and sort them?
-        # Or is this a secondary step?
-        # Flowchart:
-        # 1. Filter Physical
-        # 2. Check slots availability count?
-        # A -> Sort by distance -> If > 1 racks with same best distance? -> Filter by same barcode...
-        
-        # Let's try to find the BEST rack.
-        for rack in sorted_racks:
-             # Find a slot.
-             # We need to know occupied slots.
-            stmt_occupied = select(StockItem.position_row, StockItem.position_col).where(StockItem.rack_id == rack.id)
+        for rack in candidate_racks:
+            stmt_occupied = select(StockItem.position_row, StockItem.position_col, StockItem.y_position, StockItem.product_id).where(StockItem.rack_id == rack.id)
             result_occupied = await db.execute(stmt_occupied)
-            occupied = result_occupied.fetchall() # List of (row, col)
-            occupied_set = set(occupied)
-             
-            # Also check Redis for locked slots
-            # Scan keys "ExpectedChange:{designation}:*:*"
-            # This is potentially slow. Better approach:
-            # Iterate possible slots and check both occupied_set and Redis lock.
-             
-            found_slot = None
-             
-            # Iterate rows and cols
-            for r in range(1, rack.rows_m + 1):
+            occupied = result_occupied.fetchall()
+            
+            grid_state = {}
+            for occ_row, occ_col, occ_y, occ_prod_id in occupied:
+                if (occ_row, occ_col) not in grid_state:
+                    grid_state[(occ_row, occ_col)] = {'max_y': occ_y, 'product_id_at_0': None}
+                else:
+                    grid_state[(occ_row, occ_col)]['max_y'] = max(grid_state[(occ_row, occ_col)]['max_y'], occ_y)
+                
+                if occ_y == 0:
+                    grid_state[(occ_row, occ_col)]['product_id_at_0'] = occ_prod_id
+                    
+            # Iterujemy po magazynie (wyłączamy rzad 1)
+            for r in range(2, rack.rows_m + 1):
                 for c in range(1, rack.cols_n + 1):
-                    if (r, c) in occupied_set:
-                        continue
-                     
-                    # Check Redis Lock
-                    lock_key = f"ExpectedChange:{rack.designation}:{r}:{c}"
-                    if await redis_client.exists(lock_key):
-                        continue
-                         
-                    # Found empty slot
-                    found_slot = (r, c)
-                    break
-                if found_slot:
-                    break
-             
-            if found_slot:
-                # 6. Lock and Return
-                row, col = found_slot
-                lock_key = f"ExpectedChange:{rack.designation}:{row}:{col}"
-                
-                # Store user_id and product_id in Redis
-                lock_value = json.dumps({
-                    "user_id": user.id,
-                    "product_id": product.id,
-                    "type": "INBOUND",
-                    "expected_weight": product.weight_kg
-                })
-                
-                await redis_client.set(lock_key, lock_value, ex=settings.EXPECTED_CHANGE_TTL)
-                logger.info(f"ExpectedChange:{rack.designation}:{row}:{col}")
-                logger.info(f"Allocated {product.name} ({barcode}) to {rack.designation} [{row}, {col}] for user {user.id}")
-                 
-                return AllocationResponse(
-                     rack_id=rack.id,
-                     rack_designation=rack.designation,
-                     row=row,
-                     col=col
-                )
-                 
-        raise HTTPException(status_code=400, detail="Nie znaleziono wolnego miejsca w odpowiednich regałach")
+                    state = grid_state.get((r, c), {'max_y': -1, 'product_id_at_0': None})
+                    dist = abs(r - 1) + abs(c - 2) # Dystans do "01" (row=1, col=2)
+                    
+                    if state['max_y'] == -1: # Puste pole
+                        possible_placements.append({"rack": rack, "row": r, "col": c, "y_position": 0, "dist": dist, "is_stack": False})
+                    elif state['max_y'] == 0 and state['product_id_at_0'] == product.id: # Miejsce z gotowym 1 el na spodzie = mozna stakowac
+                        possible_placements.append({"rack": rack, "row": r, "col": c, "y_position": 1, "dist": dist, "is_stack": True})
 
-    @staticmethod 
-    async def confirm_allocation(
-        rack_location: RackLocation,
-        user: User,
-        redis_client: Redis,
-        db: AsyncSession
-    ) -> StockOut:
-        logger.info(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
-        expected_change = await redis_client.get(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
-        if expected_change is None:
-            raise HTTPException(status_code=400, detail="Nie znaleziono oczekującej zmiany dla tej lokalizacji regału")
-        
-        try:
-            change_data = json.loads(expected_change)
-            cached_user_id = change_data.get("user_id")
-            product_id = change_data.get("product_id")
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Niepoprawny typ danych w cachu")
+        if not possible_placements:
+            raise HTTPException(status_code=400, detail="Nie znaleziono wolnego miejsca w odpowiednich regałach")
 
-        if cached_user_id != user.id:
-            raise HTTPException(status_code=400, detail="Ta lokalizacja regału nie jest zablokowana dla tego użytkownika")
-    
-        
-        # update weight on rack in cache
-        stmt_rack = select(Rack).where(Rack.designation == rack_location.designation)
-        result_rack = await db.execute(stmt_rack)
-        rack = result_rack.scalar_one_or_none()
-        # Get product definition for expiry
-        stmt_prod = select(ProductDefinition).where(ProductDefinition.id == product_id)
-        result_prod = await db.execute(stmt_prod)
-        product_def = result_prod.scalar_one_or_none()
-        
-        if not product_def:
-             raise HTTPException(status_code=404, detail="Nie znaleziono produktu w bazie")
+        # 5. Strategia wg FrequencyClass
+        if product.frequency_class == FrequencyClass.A:
+            # stacking always first, then closest
+            sort_key = lambda p: (not p['is_stack'], p['dist'])
+        elif product.frequency_class == FrequencyClass.C:
+            # stacking always first, then furthest
+            sort_key = lambda p: (not p['is_stack'], -p['dist'])
+        else: # B
+            # stacking always first, then median approx 7
+            sort_key = lambda p: (not p['is_stack'], abs(p['dist'] - 7))
 
-        product_weight = product_def.weight_kg
+        possible_placements.sort(key=sort_key)
+        best_slot = possible_placements[0]
 
-        # Add stock item
-        stock_item = StockItem(
-            rack_id=rack.id,
-            position_row=rack_location.row,
-            position_col=rack_location.col,
-            product_id=product_id,  
-            entry_date=datetime.now(),
-            expiry_date=(datetime.now() + timedelta(days=product_def.expiry_days)).date(),
-            received_by_id=user.id
-        )
-        # Populate relationships explicitly for response model
-        stock_item.product = product_def
-        stock_item.receiver = user
-        
-        await redis_client.hincrby(f"Rack:{rack_location.designation}", "weight_kg", int(product_weight))
-        
-        # Set the slot weight for MQTT listener
-        await redis_client.set(f"Weight:{rack_location.designation}:{rack_location.row}:{rack_location.col}", product_weight)
-        
-        # Remove lock
-        await redis_client.delete(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
-        
-        logger.info(f"Confirmed allocation for {rack_location.designation} [{rack_location.row}, {rack_location.col}] for user {user.id}")
-        
-        db.add(stock_item)
-        await db.commit()
-        await db.refresh(stock_item, ["product", "receiver"])
-
-        # update weight on rack in cache
-       
-        return StockOut(
-            id=stock_item.id,
-            product=stock_item.product,
-            rack_id=stock_item.rack_id,
-            position_row=stock_item.position_row,
-            position_col=stock_item.position_col,
-            entry_date=stock_item.entry_date,
-            expiry_date=stock_item.expiry_date,
-            received_by=stock_item.receiver  # Mapping 'receiver' model to 'received_by' schema
-        )
-        
-
-    @staticmethod 
-    async def cancel_allocation(
-        rack_location: RackLocation,
-        user: User,
-        redis_client: Redis,
-    ):
-        expectedChange = await redis_client.get(
-            f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}"
-        )
-        if expectedChange is None:
-            raise HTTPException(status_code=400, detail="Nie znaleziono oczekującej zmiany dla tej lokalizacji regału")
-            
-        try:
-            change_data = json.loads(expectedChange)
-            cached_user_id = change_data.get("user_id")
-            # We assume we just cancel, no need for product_id unless we want to verify it?
-            # But the original code was just verifying user.
-            
-            # Note: original code tried to decrement weight:
-            # await redis_client.hincrby(f"Rack:{rack_location.designation}", "weight_kg", -rack_location.product.weight_kg)
-            # RackLocation probably doesn't have product details either?
-            # The schema for RackLocation (Input) is simple. 
-            # Original code had: rack_location.product.weight_kg ???
-            # Check schema again. RackLocation -> only designation, row, col.
-            # So `rack_location.product` would have failed there too if `rack_location` is just that schema.
-            # However, looking at cancel_allocation sig: `rack_location: RackLocation`.
-            # So likely broken code there too.
-            # For now, let's fix the user check.
-        except:
-             # Try legacy int
-             try:
-                 cached_user_id = int(expectedChange)
-             except:
-                 raise HTTPException(status_code=400, detail="Niepoprawny typ danych w cachu")
-
-        if cached_user_id != user.id:
-            raise HTTPException(status_code=400, detail="Ta lokalizacja regału nie jest zablokowana dla tego użytkownika")
-        
-        # Remove lock
-        await redis_client.delete(f"ExpectedChange:{rack_location.designation}:{rack_location.row}:{rack_location.col}")
-        
-        # update weight on rack in cache
-        # FIXME: rack_location does not have product. Need to fetch product from DB or Cache to update weight.
-        # Also, need db session to fetch rack for rack_id in response.
-        # Since this method appears unused and is broken, disabling the broken parts.
-        # await redis_client.hincrby(f"Rack:{rack_location.designation}", "weight_kg", -rack_location.product.weight_kg)
-        
-        logger.info(f"Cancelled allocation for {rack_location.designation} [{rack_location.row}, {rack_location.col}] for user {user.id}")
-        
-        # Return what we can, checking upstream usage suggested this might be broken.
-        # Returning partial response or simply returning checking schemas.
-        # For now, suppressing errors.
         return AllocationResponse(
-            rack_id=0, # Unknown
-            rack_designation=rack_location.designation,
-            row=rack_location.row,
-            col=rack_location.col
+            rack_id=best_slot['rack'].id,
+            rack_designation=best_slot['rack'].designation,
+            row=best_slot['row'],
+            col=best_slot['col'],
+            y_position=best_slot['y_position']
         )
         

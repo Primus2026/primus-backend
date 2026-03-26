@@ -23,6 +23,7 @@ class StockOut(BaseModel):
     rack_id: int 
     position_row: int 
     position_col: int 
+    y_position: int
     entry_date: datetime
     expiry_date: date
     received_by: UserReceiverOut
@@ -34,6 +35,7 @@ class StockItemSimpleOut(BaseModel):
     rack_id: int
     position_row: int
     position_col: int
+    y_position: int
     entry_date: datetime
     expiry_date: date
     received_by: UserReceiverOut

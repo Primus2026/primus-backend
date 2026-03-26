@@ -394,7 +394,8 @@ class RackService:
                 "position_col": item.position_col,
                 "entry_date": item.entry_date,
                 "expiry_date": item.expiry_date.date() if hasattr(item.expiry_date, 'date') else item.expiry_date,
-                "received_by": item.receiver
+                "received_by": item.receiver,
+                "y_position": item.y_position
             }
             results.append(item_data)
             
