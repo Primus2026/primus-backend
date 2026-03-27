@@ -98,9 +98,12 @@ class JoystickService:
         
     def _run_action_safe(self, action_type: str):
         try:
+            self.is_jogging = True
             gcode.joystick_action(action_type)
         except Exception as e:
             logger.error(f"Błąd akcji: {e}")
+        finally:
+            self.is_jogging = False
 
     def get_status(self) -> dict:
         return {

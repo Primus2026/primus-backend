@@ -55,7 +55,12 @@ class GCodeService:
                     cls._instance._serial: Optional[serial.Serial] = None
                     cls._instance._connected = False
                     cls._instance._serial_lock = threading.Lock()
+                    cls._instance._virtual_pos = None  # (x, y, z) cache for fast jogging
         return cls._instance
+
+    def _invalidate_virtual_pos(self):
+        """Forces the next jog to fetch real position from printer to fix drifts."""
+        self._virtual_pos = None
 
     # ──────────────────────────────────────────────
     #  POŁĄCZENIE SERIAL
@@ -190,25 +195,31 @@ class GCodeService:
     # ──────────────────────────────────────────────
 
     def _validate_position(self, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None):
-        """Zapobiega wyjazdowi głowicy poza określony, bezpieczny obszar roboczy."""
-        if x is not None and not (self.SAFE_X_MIN <= x <= self.SAFE_X_MAX):
-            raise ValueError(f"CRITICAL: Koordynata X={x} poza zakresem bezpieczeństwa [{self.SAFE_X_MIN}, {self.SAFE_X_MAX}]")
-        if y is not None and not (self.SAFE_Y_MIN <= y <= self.SAFE_Y_MAX):
-            raise ValueError(f"CRITICAL: Koordynata Y={y} poza zakresem bezpieczeństwa [{self.SAFE_Y_MIN}, {self.SAFE_Y_MAX}]")
+        """Zapobiega wyjazdowi głowicy poza określony, bezpieczny obszar roboczy szachownicy."""
+        # Twarde granice obszaru gry (plus minimalny margines rzędu 2cm)
+        BOARD_MIN_X = 10.0
+        BOARD_MAX_X = 260.0
+        BOARD_MIN_Y = 10.0
+        BOARD_MAX_Y = 260.0
+        
+        if x is not None and not (BOARD_MIN_X <= x <= BOARD_MAX_X):
+            raise ValueError(f"CRITICAL: Koordynata X={x} uderza w krawędź planszy [{BOARD_MIN_X}, {BOARD_MAX_X}]")
+        if y is not None and not (BOARD_MIN_Y <= y <= BOARD_MAX_Y):
+            raise ValueError(f"CRITICAL: Koordynata Y={y} uderza w krawędź planszy [{BOARD_MIN_Y}, {BOARD_MAX_Y}]")
         if z is not None and not (self.SAFE_Z_MIN <= z <= self.SAFE_Z_MAX):
             raise ValueError(f"CRITICAL: Koordynata Z={z} poza zakresem bezpieczeństwa [{self.SAFE_Z_MIN}, {self.SAFE_Z_MAX}]")
 
-        # OCHRONA MARGINESÓW: Zjazd poniżej Z_SAFE jest dozwolony TYLKO wewnątrz obszaru szachownicy
-        grid_min_x, grid_max_x = 31.0 - 5.0, 241.0 + 5.0 # Margines błędu +/- 5mm od środków skrajnych pól
-        grid_min_y, grid_max_y = 31.0 - 5.0, 241.0 + 5.0
+        # OCHRONA MARGINESÓW: Zjazd poniżej Z_SAFE jest dozwolony TYLKO dokładnie nad siatką
+        grid_min_x, grid_max_x = 31.0 - 10.0, 241.0 + 10.0 
+        grid_min_y, grid_max_y = 31.0 - 10.0, 241.0 + 10.0
         
-        target_z = z if z is not None else self.Z_SAFE # (Uproszczone: domyślnie zakładamy z bezpieczne)
+        target_z = z if z is not None else self.Z_SAFE 
         if target_z < self.Z_SAFE - 0.5:
-            # Jeśli próbujemy zjechać na dół, sprawdźmy czy X i Y są w polu gry
+            # Jeśli próbujemy zjechać na dół, sprawdźmy czy jesteśmy centralnie na planszy
             if x is not None and (x < grid_min_x or x > grid_max_x):
-                raise ValueError(f"BLOKADA: Opadanie (Z={target_z}) poza szachownicą (X={x}) jest zabronione. Tu jest plastikowa obudowa ramy!")
+                raise ValueError(f"BLOKADA: Opadanie obok pola szachownicy (X={x}) grozi kolizją z ramką!")
             if y is not None and (y < grid_min_y or y > grid_max_y):
-                raise ValueError(f"BLOKADA: Opadanie (Z={target_z}) poza szachownicą (Y={y}) jest zabronione. Tu jest plastikowa obudowa ramy!")
+                raise ValueError(f"BLOKADA: Opadanie obok pola szachownicy (Y={y}) grozi kolizją z ramką!")
 
     # ──────────────────────────────────────────────
     #  KOMENDY RUCHU (Przetworzone z Demo)
@@ -216,6 +227,7 @@ class GCodeService:
 
     def home(self) -> str:
         """Pozycjonowanie zerowe (Homing). Musi być robione na start."""
+        self._invalidate_virtual_pos()
         result = self.send_command("G28")
         # Automatyczny podjazd na bezpieczne Z po home, dla bezpieczeństwa
         self.send_command(f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}")
@@ -244,6 +256,7 @@ class GCodeService:
         self.send_command("M400", timeout=120.0)
         
         self._wait_for_position(x, y, z)
+        self._invalidate_virtual_pos()
             
         return "Ruch wykonany"
 
@@ -269,6 +282,7 @@ class GCodeService:
             "M106 S200",                           # Magnes ON
             f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}",  # Podnoszenie urobku
         ]
+        self._invalidate_virtual_pos()
         return "\n".join(self.send_commands(cmds))
 
     def place(self, x: float, y: float, z_place: float = 0.0) -> str:
@@ -281,6 +295,7 @@ class GCodeService:
             "M107",                                # Magnes OFF (upuszczenie)
             f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}",  # Podniesienie samej "karetki"
         ]
+        self._invalidate_virtual_pos()
         return "\n".join(self.send_commands(cmds))
 
     # ──────────────────────────────────────────────
@@ -332,41 +347,38 @@ class GCodeService:
     def jog(self, dx: float = 0, dy: float = 0, dz: float = 0, speed: Optional[int] = None) -> str:
         """Ruch relatywny (np. o +10mm w prawo, -10mm w dół). Chroni przed zahaczeniem magnesem."""
         
-        # OCHRONA MAGZAYNU: Pobieranie absolutnej pozycji głowicy w celu kalkulacji kolizji
+        # OCHRONA MAGZAYNU W LOCIE: buforowana weryfikacja pozycji (dla płynności Joysticka)
         try:
-            resp = self.send_command("M114")
-            import re
-            match_x = re.search(r'X:([-+]?\d*\.\d+|\d+)', resp)
-            match_y = re.search(r'Y:([-+]?\d*\.\d+|\d+)', resp)
-            match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
+            if not self._virtual_pos:
+                curr_x, curr_y, curr_z = self._get_current_position()
+                self._virtual_pos = (curr_x, curr_y, curr_z)
+            else:
+                curr_x, curr_y, curr_z = self._virtual_pos
+                
+            # 1. Sprawdzamy, czy nowy krok nie wyprowadzi głowicy poza ramę [0, 280]!
+            self._validate_position(curr_x + dx, curr_y + dy, curr_z + dz)
             
-            if match_x and match_y and match_z:
-                curr_x = float(match_x.group(1))
-                curr_y = float(match_y.group(1))
-                curr_z = float(match_z.group(1))
+            # 2. Blokada zahaczenia magnesem o ramkę przy ruchu X/Y na dole
+            if (dx != 0 or dy != 0) and curr_z < self.Z_SAFE - 0.5:
+                raise ValueError(f"BLOKADA: Aby ruszyć w boki, użyj joystika do góry (+Z), by nie zahaczyć o ścianki!")
                 
-                # 1. Sprawdzamy, czy nowy krok nie wyprowadzi głowicy poza ramę [0, 280]!
-                self._validate_position(curr_x + dx, curr_y + dy, curr_z + dz)
-                
-                # 2. Blokada zahaczenia magnesem o ramkę przy ruchu X/Y na dole
-                if (dx != 0 or dy != 0) and curr_z < self.Z_SAFE - 0.5:
-                    raise ValueError(f"BLOKADA BŁĘDU (Obecne Z={curr_z}mm < {self.Z_SAFE}mm): Aby ruszyć w boki, użyj joystika do góry (+Z), by nie zahaczyć o ścianki siatki magazynu!")
+            # Aktualizacja estymaty
+            self._virtual_pos = (curr_x + dx, curr_y + dy, curr_z + dz)
+            
         except ValueError as ve:
             raise ve # Propagujemy bezpośrednio do API
         except Exception as e:
             logger.warning(f"Ostrzeżenie: M114 parsing failed ({e}). Puszczam ruch na ryzyko operatora.")
+            self._invalidate_virtual_pos()
 
+        # Wysyłamy do bufora (wait_for_ok=True oznacza, że drukarka potwierdza zapis do kolejki, to ułamek sekundy)
         cmds = [
             "G91",  # Tryb relatywny
             f"G1 X{dx} Y{dy} Z{dz} F{speed or self.SPEED_XY}",
             "G90",  # Powrót do trybu absolutnego
         ]
-        res = "\n".join(self.send_commands(cmds))
         
-        # Oczekiwanie na dojazd po Jogu 
-        if "curr_x" in locals():
-            self._wait_for_position(curr_x + dx, curr_y + dy, curr_z + dz)
-            
+        res = "\n".join(self.send_commands(cmds))
         return res
 
     # ──────────────────────────────────────────────
