@@ -396,74 +396,57 @@ class GCodeService:
     def _snap_to_nearest_grid(self, x: float, y: float) -> tuple[int, int]:
         """
         Na podstawie aktualnych XY odgaduje najbliższe pole siatki (col, row).
-        Rzuca wyjątek jeśli głowica jest poza polem gry lub zbyt blisko krawędzi.
+        Rzuca wyjątek tylko jeśli głowica jest całkowicie poza szachownicą.
         """
-        # Oblicz względne pozycje od punktu początkowego siatki
         rel_x = x - self.GRID_ORIGIN_X
         rel_y = y - self.GRID_ORIGIN_Y
         
-        # Zaokrąglenie do najbliższego pola
         col = round(rel_x / self.CELL_SIZE) + 1
         row = round(rel_y / self.CELL_SIZE) + 1
         
-        # === WALIDACJA BEZPIECZEŃSTWA ===
-        # 1. Musi być w granicach siatki
-        if not (1 <= col <= 8 and 1 <= row <= 8):
-            raise ValueError(
-                f"BL0KADA: Głowica jest POZA siatką (col={col}, row={row}). "
-                f"Wróć joystickiem do obszaru szachownicy przed podniesieniem!"
-            )
+        # Ogranicz do granic siatki (clamp) zamiast rzucania błędem
+        col = max(1, min(8, col))
+        row = max(1, min(8, row))
         
-        # 2. Sprawdzamy, czy jesteśmy wystarczająco blisko środka pola (tolerancja ±8mm)
-        expected_x = self.GRID_ORIGIN_X + (col - 1) * self.CELL_SIZE
-        expected_y = self.GRID_ORIGIN_Y + (row - 1) * self.CELL_SIZE
-        
-        if abs(x - expected_x) > 8.0 or abs(y - expected_y) > 8.0:
-            raise ValueError(
-                f"BLOKADA: Głowica jest zbyt daleko od środka pola ({col},{row}) "
-                f"(odchylenie: dx={abs(x-expected_x):.1f}mm, dy={abs(y-expected_y):.1f}mm). "
-                f"Wycentruj dokładnie nad polem przed podniesieniem!"
-            )
-        
+        logger.info(f"Snap-to-grid: ({x:.1f},{y:.1f}) → pole ({col},{row})")
         return col, row
 
     def joystick_action(self, action: str) -> dict:
         """
-        Wykonuje pick lub place z AKTUALNEJ POZYCJI głowicy (sterowanej joystickiem).
-        Automatycznie sprawdza czy pozycja jest bezpieczna (na środku pola siatki).
+        Wykonuje pick lub place. Automatycznie centruje głowicę nad najbliższym polem
+        przed zjazdem - nie wymaga ręcznego centrowania przez operatora.
         """
         if not self.is_connected:
             raise ConnectionError("Drukarka nie podłączona")
         
         # 1. Odczytaj aktualną pozycję
         curr_x, curr_y, curr_z = self._get_current_position()
-        logger.info(f"[Joystick Action] Aktualna pozycja: X={curr_x}, Y={curr_y}, Z={curr_z}")
+        logger.info(f"[Joystick Action] Pozycja: X={curr_x:.1f}, Y={curr_y:.1f}, Z={curr_z:.1f}")
         
-        # 2. Sprawdź bezpieczeństwo i znajdź najbliższe pole siatki
+        # 2. Znajdź najbliższe pole (clamped, bez rzucania błędem)
         col, row = self._snap_to_nearest_grid(curr_x, curr_y)
-        logger.info(f"[Joystick Action] Zidentyfikowane pole siatki: ({col}, {row})")
+        target_x, target_y = self.grid_to_xy(col, row)
         
-        # 3. Wykonaj akcję
+        # 3. Auto-centrum: pojedzie na środek pola jeśli odchylenie > 2mm
+        if abs(curr_x - target_x) > 2.0 or abs(curr_y - target_y) > 2.0:
+            logger.info(f"Auto-centrowanie nad polem ({col},{row}): X={target_x}, Y={target_y}")
+            self.send_command(f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}")
+            self.send_command(f"G1 X{target_x} Y{target_y} F{self.SPEED_XY}")
+            self.send_command("M400")  # Czekaj na dojazd
+            self._wait_for_position(target_x, target_y, self.Z_SAFE)
+            self._invalidate_virtual_pos()
+        
+        # 4. Wykonaj akcję
         if action == "pick":
             result = self.pick_from_grid(col, row)
-            return {
-                "status": "ok",
-                "action": "pick",
-                "col": col, "row": row,
-                "message": f"Pobrano element z pola ({col}, {row})",
-                "response": result
-            }
+            return {"status": "ok", "action": "pick", "col": col, "row": row,
+                    "message": f"Pobrano element z pola ({col}, {row})"}
         elif action == "place":
             result = self.place_on_grid(col, row)
-            return {
-                "status": "ok",
-                "action": "place",
-                "col": col, "row": row,
-                "message": f"Odlozono element na pole ({col}, {row})",
-                "response": result
-            }
+            return {"status": "ok", "action": "place", "col": col, "row": row,
+                    "message": f"Odłożono element na pole ({col}, {row})"}
         else:
-            raise ValueError(f"Nieznana akcja: '{action}'. Użyj 'pick' lub 'place'.")
+            raise ValueError(f"Nieznana akcja: '{action}'.")
 
     # ──────────────────────────────────────────────
     #  STATUS
