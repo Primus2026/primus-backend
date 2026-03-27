@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     SERIAL_PORT: str = "/dev/ttyUSB0"
     SERIAL_BAUDRATE: int = 250000
     
+    # ESP32S3 Matrix Settings (WiFi Mode)
+    ESP_IP: str = "192.168.1.100"
+    ESP_WIFI_MODE: bool = True # Use HTTP/UDP instead of Serial
+
     # Camera Settings
     CAMERA_INDEX: int = 0
     
