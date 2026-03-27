@@ -45,7 +45,7 @@ class GCodeService:
     # === OFFSET KAMERY WZGLĘDEM MAGNESU ===
     # Pozwala wycentrować kadr nad polem gry (Zadanie Kalibracyjne Osoby C)
     CAMERA_OFFSET_X = -18.0  # Dodaj lub odejmij milimetry, np. -20
-    CAMERA_OFFSET_Y = 0.0  # Dodaj lub odejmij milimetry, np. +35
+    CAMERA_OFFSET_Y = -5.0  # Dodaj lub odejmij milimetry, np. +35
 
     def __new__(cls):
         if cls._instance is None:
@@ -115,10 +115,9 @@ class GCodeService:
     #  WYSYŁANIE KOMEND G-CODE
     # ──────────────────────────────────────────────
 
-    def send_command(self, cmd: str, wait_for_ok: bool = True, timeout: float = 60.0, flush_before: bool = False) -> str:
+    def send_command(self, cmd: str, wait_for_ok: bool = True, timeout: float = 60.0) -> str:
         """
         Wysyła jedną komendę G-code i czeka na potwierdzenie 'ok'.
-        flush_before=True czyści bufor wejściowy przed wysłaniem (ważne dla M114 po asynchronicznym JOG).
         """
         if not self.is_connected:
             logger.warning("Drukarka nie jest podłączona. Automatyczne łaczenie...")
@@ -134,10 +133,6 @@ class GCodeService:
             cmd = cmd[:cmd.index(";")].strip()
 
         with self._serial_lock:
-            if flush_before and self._serial.in_waiting:
-                logger.debug("Flushing Input Buffer before command...")
-                self._serial.reset_input_buffer()
-
             logger.debug(f"TX: {cmd}")
             self._serial.write(f"{cmd}\n".encode("utf-8"))
             
@@ -390,8 +385,7 @@ class GCodeService:
     def _get_current_position(self) -> tuple[float, float, float]:
         """Odczytuje aktualne XYZ z M114. Zwraca (x, y, z) lub rzuca wyjątkiem."""
         import re
-        # Czyścimy bufor, bo po szybkim Jogu (wait_for_ok=False) mogą tam wisieć stare 'ok'
-        resp = self.send_command("M114", flush_before=True)
+        resp = self.send_command("M114")
         match_x = re.search(r'X:([-+]?\d*\.\d+|\d+)', resp)
         match_y = re.search(r'Y:([-+]?\d*\.\d+|\d+)', resp)
         match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
@@ -402,57 +396,74 @@ class GCodeService:
     def _snap_to_nearest_grid(self, x: float, y: float) -> tuple[int, int]:
         """
         Na podstawie aktualnych XY odgaduje najbliższe pole siatki (col, row).
-        Rzuca wyjątek tylko jeśli głowica jest całkowicie poza szachownicą.
+        Rzuca wyjątek jeśli głowica jest poza polem gry lub zbyt blisko krawędzi.
         """
+        # Oblicz względne pozycje od punktu początkowego siatki
         rel_x = x - self.GRID_ORIGIN_X
         rel_y = y - self.GRID_ORIGIN_Y
         
+        # Zaokrąglenie do najbliższego pola
         col = round(rel_x / self.CELL_SIZE) + 1
         row = round(rel_y / self.CELL_SIZE) + 1
         
-        # Ogranicz do granic siatki (clamp) zamiast rzucania błędem
-        col = max(1, min(8, col))
-        row = max(1, min(8, row))
+        # === WALIDACJA BEZPIECZEŃSTWA ===
+        # 1. Musi być w granicach siatki
+        if not (1 <= col <= 8 and 1 <= row <= 8):
+            raise ValueError(
+                f"BL0KADA: Głowica jest POZA siatką (col={col}, row={row}). "
+                f"Wróć joystickiem do obszaru szachownicy przed podniesieniem!"
+            )
         
-        logger.info(f"Snap-to-grid: ({x:.1f},{y:.1f}) → pole ({col},{row})")
+        # 2. Sprawdzamy, czy jesteśmy wystarczająco blisko środka pola (tolerancja ±8mm)
+        expected_x = self.GRID_ORIGIN_X + (col - 1) * self.CELL_SIZE
+        expected_y = self.GRID_ORIGIN_Y + (row - 1) * self.CELL_SIZE
+        
+        if abs(x - expected_x) > 8.0 or abs(y - expected_y) > 8.0:
+            raise ValueError(
+                f"BLOKADA: Głowica jest zbyt daleko od środka pola ({col},{row}) "
+                f"(odchylenie: dx={abs(x-expected_x):.1f}mm, dy={abs(y-expected_y):.1f}mm). "
+                f"Wycentruj dokładnie nad polem przed podniesieniem!"
+            )
+        
         return col, row
 
     def joystick_action(self, action: str) -> dict:
         """
-        Wykonuje pick lub place. Automatycznie centruje głowicę nad najbliższym polem
-        przed zjazdem - nie wymaga ręcznego centrowania przez operatora.
+        Wykonuje pick lub place z AKTUALNEJ POZYCJI głowicy (sterowanej joystickiem).
+        Automatycznie sprawdza czy pozycja jest bezpieczna (na środku pola siatki).
         """
         if not self.is_connected:
             raise ConnectionError("Drukarka nie podłączona")
         
         # 1. Odczytaj aktualną pozycję
         curr_x, curr_y, curr_z = self._get_current_position()
-        logger.info(f"[Joystick Action] Pozycja: X={curr_x:.1f}, Y={curr_y:.1f}, Z={curr_z:.1f}")
+        logger.info(f"[Joystick Action] Aktualna pozycja: X={curr_x}, Y={curr_y}, Z={curr_z}")
         
-        # 2. Znajdź najbliższe pole (clamped, bez rzucania błędem)
+        # 2. Sprawdź bezpieczeństwo i znajdź najbliższe pole siatki
         col, row = self._snap_to_nearest_grid(curr_x, curr_y)
-        target_x, target_y = self.grid_to_xy(col, row)
+        logger.info(f"[Joystick Action] Zidentyfikowane pole siatki: ({col}, {row})")
         
-        # 3. Auto-centrum: pojedzie na środek pola jeśli odchylenie > 2mm
-        if abs(curr_x - target_x) > 2.0 or abs(curr_y - target_y) > 2.0:
-            logger.info(f"Auto-centrowanie nad polem ({col},{row}): X={target_x}, Y={target_y}")
-            self.send_command(f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}")
-            self.send_command(f"G1 X{target_x} Y{target_y} F{self.SPEED_XY}")
-            self.send_command("M400")  # Czekaj na dojazd
-            self._wait_for_position(target_x, target_y, self.Z_SAFE)
-            self._invalidate_virtual_pos()
-        
-        # 4. Wykonaj akcję
+        # 3. Wykonaj akcję
         if action == "pick":
             result = self.pick_from_grid(col, row)
-            return {"status": "ok", "action": "pick", "col": col, "row": row,
-                    "message": f"Pobrano element z pola ({col}, {row})"}
+            return {
+                "status": "ok",
+                "action": "pick",
+                "col": col, "row": row,
+                "message": f"Pobrano element z pola ({col}, {row})",
+                "response": result
+            }
         elif action == "place":
             result = self.place_on_grid(col, row)
-            return {"status": "ok", "action": "place", "col": col, "row": row,
-                    "message": f"Odłożono element na pole ({col}, {row})"}
+            return {
+                "status": "ok",
+                "action": "place",
+                "col": col, "row": row,
+                "message": f"Odlozono element na pole ({col}, {row})",
+                "response": result
+            }
         else:
-            raise ValueError(f"Nieznana akcja: '{action}'.")
+            raise ValueError(f"Nieznana akcja: '{action}'. Użyj 'pick' lub 'place'.")
 
     # ──────────────────────────────────────────────
     #  STATUS

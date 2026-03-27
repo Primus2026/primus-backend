@@ -21,24 +21,18 @@ async def make_move(req: MoveRequest):
 
 @router.post("/ai-move")
 async def ai_move(req: MoveRequest):
-    # 1. Oblicz najlepszy ruch (AI to zawsze X)
-    best_val = -1000
-    best_move = -1
-    board = req.board.copy()
-    
-    for i in range(9):
-        if not board[i]:
-            board[i] = 'X'
-            move_val = TicTacToeService.minimax(board, 0, False)
-            board[i] = ''
-            if move_val > best_val:
-                best_move = i
-                best_val = move_val
-    
-    if best_move != -1:
-        await TicTacToeService.move_physical_piece('X', best_move, req.x_count)
-        return {"move_index": best_move}
-    raise HTTPException(status_code=400, detail="Brak możliwych ruchów")
+    # SI (O) prosi LLM (Ollama/Qwen) o wyznaczenie najlepszego ruchu
+    try:
+        best_move = await TicTacToeService.get_ai_move_llm(req.board)
+        
+        if best_move != -1 and not req.board[best_move]:
+            # SI zawsze kładzie 'O' (pobierane z R8)
+            await TicTacToeService.move_physical_piece('O', best_move, req.o_count)
+            return {"move_index": best_move}
+            
+        raise HTTPException(status_code=400, detail="SI zwróciła zajęte pole lub błąd")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/restart")
 async def restart_game(board: List[str] = Body(...)):

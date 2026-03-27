@@ -34,7 +34,7 @@ CURRENT BOARD STATE:
 STRATEGY:
 1. If you can win in one move, take it.
 2. If the opponent is about to win, block them.
-3. Otherwise, take the center or a corner.
+3. Otherwise, take the best streategy for you . 
 
 EXAMPLES:
 Board: X,X,.,O,.,.,.,.,. -> Response: {{"move_index": 2}} (Blocking X)
@@ -78,9 +78,6 @@ Example: {{"move_index": 4}}
 
     @staticmethod
     async def move_physical_piece(piece_type: str, board_index: int, piece_count: int):
-        if not gcode.is_connected:
-            gcode.connect()
-            gcode.home()
 
         source_list = TicTacToeService.X_STORAGE if piece_type == 'X' else TicTacToeService.O_STORAGE
         # piece_count to liczba figur danego typu już będących na planszy (0-4)
@@ -114,6 +111,8 @@ Example: {{"move_index": 4}}
             
             if piece == 'X': x_count += 1
             else: o_count += 1
+
+        gcode.home()
 
     @staticmethod
     def check_winner(board: List[str]) -> Optional[str]:

@@ -57,9 +57,6 @@ class CameraService:
             logger.error(f"Błąd komunikacji z Windows AI na porcie 8001: {e}")
             return None
 
-    def release(self):
-        """Metoda zgodności dla wcześniejszego kodu, teraz nie robi nic."""
-        pass
 
 
 # Główna instancja singelton 

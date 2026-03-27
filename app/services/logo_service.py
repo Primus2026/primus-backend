@@ -34,7 +34,7 @@ class LogoService:
             cols = range(1, 9) if row % 2 != 0 else range(8, 0, -1)
             for col in cols:
                 gcode.move_camera_to_grid(col=col, row=row)
-                await asyncio.sleep(0.4) # Optymalizacja czasu
+                await asyncio.sleep(0.1) # Optymalizacja czasu
                 
                 if camera.decode_qr() or camera.recognize_pictogram():
                     found_blocks.append((col, row))
