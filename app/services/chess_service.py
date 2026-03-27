@@ -1,13 +1,14 @@
 import asyncio
 import logging
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from app.services.camera_service import camera
 from app.services.gcode_service import gcode
 
 logger = logging.getLogger("CHESS_SERVICE")
 
 class ChessService:
-    # Definicja docelowych pozycji dla szachownicy
+    # Definicja pozycji startowych dla każdego typu figury
+    # Tutaj użytkownik kładzie figury przed uruchomieniem algorytmu
     STARTING_POSITIONS = {
         "WB": [(1,1), (8,1)], "SB": [(2,1), (7,1)], "GB": [(3,1), (6,1)], "HB": [(4,1)], "KB": [(5,1)],
         "PB": [(i, 2) for i in range(1, 9)],
@@ -18,45 +19,110 @@ class ChessService:
     @staticmethod
     async def set_custom_formation(requested_pieces: List[Dict]):
         """
+        Inteligentne układanie figur z pozycji startowych na docelowe.
+        
         requested_pieces: list of {"type": "WB", "col": 4, "row": 5}
+        
+        Algorytm:
+        1. Zbierz unikalne typy figur z żądania
+        2. Dla każdego typu, skanuj TYLKO jego potencjalne pozycje startowe
+        3. Przesuwaj znalezione figury na docelowe pozycje
         """
         if not gcode.is_connected:
             gcode.connect()
             gcode.home()
 
-        # Kopiujemy bazę pozycji startowych, żeby wiedzieć co jeszcze "mamy w magazynie"
-        available_sources = {k: v.copy() for k, v in ChessService.STARTING_POSITIONS.items()}
-        moved_count = 0
-
-        # Sortujemy żądania (opcjonalnie), by najpierw układać te z tyłu planszy
+        # 1. Zbierz typy figur i ile sztuk każdego typu potrzebujemy
+        needed_pieces: Dict[str, List[Tuple[int, int]]] = {}  # typ -> lista docelowych (col, row)
         for req in requested_pieces:
             p_type = req["type"]
-            t_col, t_row = req["col"], req["row"]
+            target = (req["col"], req["row"])
+            if p_type not in needed_pieces:
+                needed_pieces[p_type] = []
+            needed_pieces[p_type].append(target)
 
-            if p_type in available_sources and available_sources[p_type]:
-                # Znajdź najbliższą figurę tego typu na startowej pozycji
-                sources = available_sources[p_type]
+        logger.info(f"Potrzebne figury: {needed_pieces}")
+
+        # 2. Skanuj tylko pozycje startowe dla potrzebnych typów i znajdź figury
+        found_pieces: Dict[str, List[Tuple[int, int]]] = {}  # typ -> lista znalezionych (col, row)
+        
+        # Zbierz wszystkie pozycje do przeskanowania (bez duplikatów)
+        positions_to_scan: List[Tuple[int, int, str]] = []  # (col, row, expected_type)
+        for p_type in needed_pieces.keys():
+            if p_type in ChessService.STARTING_POSITIONS:
+                for pos in ChessService.STARTING_POSITIONS[p_type]:
+                    positions_to_scan.append((pos[0], pos[1], p_type))
+        
+        # Sortuj pozycje wężykiem dla optymalnego ruchu
+        positions_to_scan.sort(key=lambda p: (p[1], p[0] if p[1] % 2 == 1 else -p[0]))
+        
+        logger.info(f"Skanowanie {len(positions_to_scan)} potencjalnych pozycji...")
+        
+        for col, row, expected_type in positions_to_scan:
+            gcode.move_camera_to_grid(col=col, row=row)
+            await asyncio.sleep(0.5)  # Czas na stabilizację
+            
+            # Rozpoznaj figurę
+            detected = camera.decode_qr()
+            if not detected:
+                detected = camera.recognize_pictogram()
+            
+            if detected:
+                logger.info(f"Znaleziono {detected} na ({col},{row}), oczekiwano {expected_type}")
+                # Zapisz tylko jeśli to oczekiwany typ (lub akceptujemy wszystko)
+                if detected not in found_pieces:
+                    found_pieces[detected] = []
+                found_pieces[detected].append((col, row))
+
+        logger.info(f"Znalezione figury: {found_pieces}")
+
+        # 3. Przesuń figury na docelowe pozycje
+        moved_count = 0
+        errors = []
+
+        for p_type, targets in needed_pieces.items():
+            sources = found_pieces.get(p_type, []).copy()
+            
+            if len(sources) < len(targets):
+                errors.append(f"Brak wystarczającej liczby figur {p_type}: znaleziono {len(sources)}, potrzeba {len(targets)}")
+                continue
+            
+            for target in targets:
+                t_col, t_row = target
+                
+                # Znajdź najbliższą figurę tego typu
+                if not sources:
+                    break
+                    
                 best_source = min(sources, key=lambda s: (s[0]-t_col)**2 + (s[1]-t_row)**2)
                 s_col, s_row = best_source
-
-                # Jeśli figura już stoi tam gdzie chcemy, pomiń ruch
+                
+                # Jeśli figura już stoi na miejscu docelowym, pomiń
                 if s_col == t_col and s_row == t_row:
+                    logger.info(f"{p_type} już na miejscu ({t_col},{t_row})")
                     sources.remove(best_source)
                     continue
-
+                
                 try:
-                    logger.info(f"Przesuwam {p_type} z R{s_row}C{s_col} na R{t_row}C{t_col}")
+                    logger.info(f"Przesuwam {p_type} z ({s_col},{s_row}) na ({t_col},{t_row})")
                     gcode.pick_from_grid(col=s_col, row=s_row, level="bottom")
                     gcode.place_on_grid(col=t_col, row=t_row, level="bottom")
                     
                     sources.remove(best_source)
                     moved_count += 1
                 except Exception as e:
-                    logger.error(f"G-Code error: {e}")
-            else:
-                logger.warning(f"Brak wolnej figury typu {p_type} na pozycjach startowych!")
+                    logger.error(f"Błąd G-Code: {e}")
+                    errors.append(f"Błąd ruchu {p_type}: {e}")
 
-        return {"status": "success", "moved": moved_count}
+        result = {
+            "status": "success" if not errors else "partial",
+            "moved": moved_count,
+            "requested": len(requested_pieces)
+        }
+        if errors:
+            result["errors"] = errors
+            
+        return result
     CHESS_TARGETS = {
         # Rząd 1: Białe figury
         "WB": [(1,1), (8,1)], "SB": [(2,1), (7,1)], "GB": [(3,1), (6,1)], "HB": [(4,1)], "KB": [(5,1)],

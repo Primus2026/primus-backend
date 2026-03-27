@@ -18,6 +18,17 @@ from datetime import datetime, timedelta
 logger = logging.getLogger("ALLOCATION_SERVICE")
 
 class AllocationService:
+    """
+    Serwis alokacji miejsc w magazynie.
+    
+    Strategia rozmieszczania wg klasy rotacji:
+    - Klasa A (często wyjmowane): najbliżej slotu wydania (rząd 1, dystans minimalny)
+    - Klasa B (średnia rotacja): środek magazynu
+    - Klasa C (rzadko wyjmowane / nowe): najdalej od wyjścia (maksymalny dystans)
+    
+    Produkty wyjęte po raz pierwszy automatycznie otrzymują klasę A
+    (obsługiwane przez ProductStatsService przy outbound).
+    """
 
     @staticmethod
     async def allocate_item(
@@ -105,13 +116,15 @@ class AllocationService:
                     grid_state[(occ_row, occ_col)]['product_id_at_0'] = occ_prod_id
                     
             # Iterujemy po magazynie (RZĘDY DB: 1-7 -> Fizyczne: 2-8)
+            # Slot wydania (outbound) to fizyczny rząd 1 (col=2), więc najbliżej to rząd DB 1
             for r in range(1, 8):
                 for c in range(1, 9):
                     state = grid_state.get((r, c), {'max_y': -1, 'product_id_at_0': None})
-                    # Dystans do slotu Inbound (fizyczny 1,1 -> DB: r=0, c=1, ale r wejsciowe to r-1?)
-                    # Skoro Inbound to fizyczny r1 c1, a magazyn r2, to dystans od (0,1)?
-                    # Uprośćmy: dystans do (0,1) w kordach DB.
-                    dist = abs(r - 0) + abs(c - 1)
+                    
+                    # Dystans od slotu wydania (fizyczny rząd 1, col 2)
+                    # W DB: rząd 1 jest najbliżej wyjścia
+                    # Dystans = numer rzędu (r=1 najbliżej, r=7 najdalej)
+                    dist = r
                     
                     if state['max_y'] == -1: # Puste pole
                         possible_placements.append({"rack": rack, "row": r, "col": c, "y_position": 0, "dist": dist, "is_stack": False})
@@ -122,18 +135,27 @@ class AllocationService:
             raise HTTPException(status_code=400, detail="Nie znaleziono wolnego miejsca w odpowiednich regałach")
 
         # 5. Strategia wg FrequencyClass
+        # Klasa A: najbliżej wyjścia (minimalny dystans) - produkty często wyjmowane
+        # Klasa C: najdalej od wyjścia (maksymalny dystans) - nowe produkty / rzadko wyjmowane
+        # Klasa B: środek magazynu
+        
         if product.frequency_class == FrequencyClass.A:
-            # stacking always first, then closest
-            sort_key = lambda p: (not p['is_stack'], p['dist'])
+            # Klasa A: stacking first, potem NAJBLIŻEJ wyjścia (rząd 1)
+            sort_key = lambda p: (not p['is_stack'], p['dist'], p['col'])
+            logger.info(f"Alokacja produktu {product.name} (Klasa A) - priorytet: najbliżej wyjścia")
         elif product.frequency_class == FrequencyClass.C:
-            # stacking always first, then furthest
-            sort_key = lambda p: (not p['is_stack'], -p['dist'])
-        else: # B
-            # stacking always first, then median approx 7
-            sort_key = lambda p: (not p['is_stack'], abs(p['dist'] - 7))
+            # Klasa C: stacking first, potem NAJDALEJ od wyjścia (rząd 7)
+            sort_key = lambda p: (not p['is_stack'], -p['dist'], p['col'])
+            logger.info(f"Alokacja produktu {product.name} (Klasa C) - priorytet: najdalej od wyjścia")
+        else:  # B
+            # Klasa B: stacking first, potem środek (dystans ~4)
+            sort_key = lambda p: (not p['is_stack'], abs(p['dist'] - 4), p['col'])
+            logger.info(f"Alokacja produktu {product.name} (Klasa B) - priorytet: środek magazynu")
 
         possible_placements.sort(key=sort_key)
         best_slot = possible_placements[0]
+        
+        logger.info(f"Wybrane miejsce: Regał {best_slot['rack'].designation}, Rząd {best_slot['row']}, Kolumna {best_slot['col']}")
 
         return AllocationResponse(
             rack_id=best_slot['rack'].id,

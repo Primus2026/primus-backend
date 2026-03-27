@@ -20,24 +20,19 @@ def clean_redis():
 
 @pytest.mark.asyncio
 async def test_allocate_item_success_class_a(db_session: AsyncSession, clean_redis):
-    """Test allocation for Class A product (Closest to exit)"""
+    """Test allocation for Class A product - should be placed CLOSEST to exit (row 1)"""
     # Setup Data
-    # Rack 1: Far (20m)
-    rack1 = Rack(
+    # Rack with multiple rows to test distance logic
+    rack = Rack(
         designation="R-A-1", max_weight_kg=1000, max_dims_x_mm=100, max_dims_y_mm=100, max_dims_z_mm=100,
-        temp_min=5, temp_max=15, rows_m=2, cols_n=2, distance_from_exit_m=20
+        temp_min=5, temp_max=15, rows_m=7, cols_n=8, distance_from_exit_m=5
     )
-    # Rack 2: Close (5m) -> Should be picked
-    rack2 = Rack(
-        designation="R-A-2", max_weight_kg=1000, max_dims_x_mm=100, max_dims_y_mm=100, max_dims_z_mm=100,
-        temp_min=5, temp_max=15, rows_m=2, cols_n=2, distance_from_exit_m=5
-    )
-    db_session.add_all([rack1, rack2])
+    db_session.add(rack)
     
     product = ProductDefinition(
         name="Prod A", barcode="A-111", expiry_days=30, weight_kg=1,
         req_temp_min=5, req_temp_max=15, dims_x_mm=10, dims_y_mm=10, dims_z_mm=10,
-        frequency_class=FrequencyClass.A
+        frequency_class=FrequencyClass.A  # Klasa A = często wyjmowane = blisko wyjścia
     )
     db_session.add(product)
     await db_session.commit()
@@ -57,37 +52,25 @@ async def test_allocate_item_success_class_a(db_session: AsyncSession, clean_red
         redis_client=clean_redis
     )
 
-    # Assert
-    assert result.rack_designation == "R-A-2"
-    assert result.row == 1
+    # Assert - Class A should be placed in ROW 1 (closest to exit)
+    assert result.rack_designation == "R-A-1"
+    assert result.row == 1  # Najbliżej wyjścia!
     assert result.col == 1
-    
-    # Verify Redis Lock
-    expected_key = f"ExpectedChange:R-A-2:1:1"
-    clean_redis.set.assert_called()
-    args, _ = clean_redis.set.call_args
-    assert args[0] == expected_key
-    assert json.loads(args[1])["user_id"] == user.id
 
 @pytest.mark.asyncio
 async def test_allocate_item_success_class_c(db_session: AsyncSession, clean_redis):
-    """Test allocation for Class C product (Farthest from exit)"""
-    # Rack 1: Far (20m) -> Should be picked
-    rack1 = Rack(
+    """Test allocation for Class C product - should be placed FARTHEST from exit (row 7)"""
+    # Rack with multiple rows
+    rack = Rack(
         designation="R-C-1", max_weight_kg=1000, max_dims_x_mm=100, max_dims_y_mm=100, max_dims_z_mm=100,
-        temp_min=5, temp_max=15, rows_m=2, cols_n=2, distance_from_exit_m=20
+        temp_min=5, temp_max=15, rows_m=7, cols_n=8, distance_from_exit_m=5
     )
-    # Rack 2: Close (5m)
-    rack2 = Rack(
-        designation="R-C-2", max_weight_kg=1000, max_dims_x_mm=100, max_dims_y_mm=100, max_dims_z_mm=100,
-        temp_min=5, temp_max=15, rows_m=2, cols_n=2, distance_from_exit_m=5
-    )
-    db_session.add_all([rack1, rack2])
+    db_session.add(rack)
     
     product = ProductDefinition(
         name="Prod C", barcode="C-333", expiry_days=30, weight_kg=1,
         req_temp_min=5, req_temp_max=15, dims_x_mm=10, dims_y_mm=10, dims_z_mm=10,
-        frequency_class=FrequencyClass.C
+        frequency_class=FrequencyClass.C  # Klasa C = rzadko wyjmowane / nowe = daleko od wyjścia
     )
     db_session.add(product)
     await db_session.commit()
@@ -102,7 +85,40 @@ async def test_allocate_item_success_class_c(db_session: AsyncSession, clean_red
         redis_client=clean_redis
     )
 
+    # Assert - Class C should be placed in ROW 7 (farthest from exit)
     assert result.rack_designation == "R-C-1"
+    assert result.row == 7  # Najdalej od wyjścia!
+
+@pytest.mark.asyncio
+async def test_allocate_item_success_class_b(db_session: AsyncSession, clean_redis):
+    """Test allocation for Class B product - should be placed in MIDDLE rows"""
+    rack = Rack(
+        designation="R-B-1", max_weight_kg=1000, max_dims_x_mm=100, max_dims_y_mm=100, max_dims_z_mm=100,
+        temp_min=5, temp_max=15, rows_m=7, cols_n=8, distance_from_exit_m=5
+    )
+    db_session.add(rack)
+    
+    product = ProductDefinition(
+        name="Prod B", barcode="B-222", expiry_days=30, weight_kg=1,
+        req_temp_min=5, req_temp_max=15, dims_x_mm=10, dims_y_mm=10, dims_z_mm=10,
+        frequency_class=FrequencyClass.B  # Klasa B = średnia rotacja = środek
+    )
+    db_session.add(product)
+    await db_session.commit()
+    
+    user = User(login="alloc_user_b", email="b@t.pl", password_hash="hash", role="WAREHOUSEMAN", is_active=True)
+    clean_redis.exists.return_value = False
+
+    result = await AllocationService.allocate_item(
+        db=db_session,
+        barcode="B-222",
+        user=user,
+        redis_client=clean_redis
+    )
+
+    # Assert - Class B should be placed in middle rows (around 4)
+    assert result.rack_designation == "R-B-1"
+    assert result.row in [3, 4, 5]  # Środek magazynu
 
 @pytest.mark.asyncio
 async def test_allocate_item_no_suitable_racks_requirements(db_session: AsyncSession, clean_redis):

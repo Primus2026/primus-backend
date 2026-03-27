@@ -5,6 +5,9 @@ from sqlalchemy import select
 from redis.asyncio import Redis
 from app.core.config import settings
 import math
+import logging
+
+logger = logging.getLogger("PRODUCT_STATS_SERVICE")
 
 class ProductStatsService:
     @staticmethod
@@ -14,7 +17,11 @@ class ProductStatsService:
         result = await db.execute(stmt)
         product_stats = result.scalars().first()
         
+        is_first_pick = False
+        
         if not product_stats:
+            # Pierwsze wyjęcie tego produktu - oznacz jako klasa A!
+            is_first_pick = True
             product_stats = ProductStats(
                 product_id=product_id, 
                 pick_count=count, 
@@ -22,17 +29,30 @@ class ProductStatsService:
             )
             db.add(product_stats)
         else:
+            # Sprawdź czy to pierwsze wyjęcie (pick_count było 0)
+            if product_stats.pick_count == 0:
+                is_first_pick = True
             product_stats.pick_count += count
             product_stats.total_since_last_update += count
+        
+        # 2. Jeśli to pierwsze wyjęcie - automatycznie ustaw klasę A
+        if is_first_pick:
+            stmt_product = select(ProductDefinition).where(ProductDefinition.id == product_id)
+            result_product = await db.execute(stmt_product)
+            product = result_product.scalars().first()
+            if product and product.frequency_class != FrequencyClass.A:
+                logger.info(f"Produkt {product.name} (ID={product_id}) wyjęty po raz pierwszy - zmiana klasy na A")
+                product.frequency_class = FrequencyClass.A
+                db.add(product)
         
         await db.commit()
         await db.refresh(product_stats)
 
-        # 2. Update Global Counter in Redis
+        # 3. Update Global Counter in Redis
         global_counter_key = "global_transaction_counter"
         current_count = await redis_client.incrby(global_counter_key, count)
         
-        # 3. Check trigger condition (every 10th transaction)
+        # 4. Check trigger condition (every 10th transaction)
         if current_count % 10 == 0:
             # Trigger frequency recalculation
             from app.tasks.product_stats_tasks import update_frequencies_task
