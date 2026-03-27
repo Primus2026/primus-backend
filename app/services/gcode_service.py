@@ -190,6 +190,23 @@ class GCodeService:
             
         logger.warning(f"Timeout oczekiwania na pozycję {target_x}, {target_y}, {target_z} (M114)")
 
+    def _wait_for_position_z_only(self, target_z: float, tolerance: float = 0.5, timeout: float = 30.0):
+        """Czeka tylko na osiągnięcie docelowego Z (ignoruje X/Y). Używane przed ruchem XY."""
+        import re
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            resp = self.send_command("M114")
+            match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
+            
+            if match_z:
+                curr_z = float(match_z.group(1))
+                if abs(curr_z - target_z) <= tolerance:
+                    return  # Osiągnięto cel Z!
+                    
+            time.sleep(0.05)
+            
+        logger.warning(f"Timeout oczekiwania na Z={target_z} (M114)")
+
     # ──────────────────────────────────────────────
     #  LIMITATORY BEZPIECZEŃSTWA 
     # ──────────────────────────────────────────────
@@ -283,20 +300,39 @@ class GCodeService:
             f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}",  # Podnoszenie urobku
         ]
         self._invalidate_virtual_pos()
-        return "\n".join(self.send_commands(cmds))
+        result = "\n".join(self.send_commands(cmds))
+        
+        # KRYTYCZNE: Czekaj aż głowica fizycznie osiągnie Z_SAFE przed następną operacją!
+        # Zapobiega kolizjom gdy place() startuje zanim pick() skończy podnoszenie.
+        self.send_command("M400", timeout=120.0)
+        self._wait_for_position(x, y, self.Z_SAFE)
+        
+        return result
 
     def place(self, x: float, y: float, z_place: float = 0.0) -> str:
         """Sekwencja odłożenia elementu w danym XYZ."""
         self._validate_position(x, y, z_place)
+        
+        # KRYTYCZNE: Upewnij się że głowica jest na Z_SAFE przed ruchem XY!
+        # Zapobiega zahaczeniu o ramkę przy ruchu bocznym.
+        self.send_command(f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}")
+        self.send_command("M400", timeout=120.0)
+        self._wait_for_position_z_only(self.Z_SAFE)
+        
         cmds = [
-            f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}",  # [BEZPIECZEŃSTWO] Najpierw max do góry
             f"G1 X{x} Y{y} F{self.SPEED_XY}",      # Dojazd na XY z urobkiem
             f"G1 Z{z_place} F{self.SPEED_Z}",      # Opadanie na cel
             "M107",                                # Magnes OFF (upuszczenie)
             f"G1 Z{self.Z_SAFE} F{self.SPEED_Z}",  # Podniesienie samej "karetki"
         ]
         self._invalidate_virtual_pos()
-        return "\n".join(self.send_commands(cmds))
+        result = "\n".join(self.send_commands(cmds))
+        
+        # Czekaj na zakończenie podnoszenia po upuszczeniu
+        self.send_command("M400", timeout=120.0)
+        self._wait_for_position(x, y, self.Z_SAFE)
+        
+        return result
 
     # ──────────────────────────────────────────────
     #  ABSTRAKCJA SIATKI 8x8

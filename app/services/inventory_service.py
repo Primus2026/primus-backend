@@ -37,7 +37,7 @@ class InventoryService:
             columns = range(1, 9) if row % 2 != 0 else range(8, 0, -1)
             for col in columns:
                 gcode.move_camera_to_grid(col=col, row=row)
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(0.35)  # Czas na stabilizację kamery
 
                 detected_barcode = camera.decode_qr() or camera.recognize_pictogram()
                 
@@ -105,7 +105,7 @@ class InventoryService:
                 
                 # Ruch kamerą nad pole
                 gcode.move_camera_to_grid(col=col, row=row)
-                await asyncio.sleep(0.5) # Krótka pauza na stabilizację kamery
+                await asyncio.sleep(0.35)  # Czas na stabilizację kamery
 
                 # Próba detekcji: QR -> Figura
                 detected_barcode = camera.decode_qr()
@@ -117,9 +117,7 @@ class InventoryService:
                     await InventoryService._handle_found_item(
                         db, rack.id, row, col, detected_barcode, user_id
                     )
-                
-                # WYMUSZENIE SYNCHRONIZACJI Z BAZĄ
-                await db.flush()
+                # Usunięto db.flush() z pętli - commit na końcu wystarczy
 
         await db.commit()
         return {"status": "success", "message": "Inwentaryzacja rzędów 2-8 zakończona"}

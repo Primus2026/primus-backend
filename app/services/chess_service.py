@@ -87,7 +87,7 @@ class ChessService:
             
             for col in cols:
                 gcode.move_camera_to_grid(col=col, row=row)
-                await asyncio.sleep(0.6) # Czas na focus kamery
+                await asyncio.sleep(1.0)  # Zwiększone z 0.6s - więcej czasu na stabilizację kamery po ruchu
 
                 barcode = camera.decode_qr()
                 if not barcode:

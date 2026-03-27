@@ -7,16 +7,16 @@ from app.services.gcode_service import gcode
 logger = logging.getLogger("LOGO_SERVICE")
 
 class LogoService:
-    # Definicja wzoru Logo OZT (21 pól)
+    # Definicja wzoru Logo OZT (21 pól) - odbicie lustrzane w poziomie (col -> 9-col)
     LOGO_PATTERN = [
-        (1,1), (2,1), (3,1),
-        (1,2), (3,2),
-        (1,3), (2,3), (3,3), (4,3), (5,3), (6,3),
-        (5,4),
-        (4,5),
-        (3,6), (4,6), (5,6), (6,6), (7,6), (8,6),
-        (7,7),
-        (7,8)
+        (8,1), (7,1), (6,1),
+        (8,2), (6,2),
+        (8,3), (7,3), (6,3), (5,3), (4,3), (3,3),
+        (4,4),
+        (5,5),
+        (6,6), (5,6), (4,6), (3,6), (2,6), (1,6),
+        (2,7),
+        (2,8)
     ]
 
     @staticmethod
