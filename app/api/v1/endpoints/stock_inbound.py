@@ -45,8 +45,8 @@ async def direct_add_stock_item(
     # TU TRZEBA TO ODKOMENTOWAC
 
     try:
-        gcode.pick_from_grid(col=1, row=1, level=0)
-        gcode.place_on_grid(col=allocation.col, row=allocation.row, level=allocation.y_position)
+        gcode.pick_from_grid(col=1, row=1, level="bottom")
+        gcode.place_on_grid(col=allocation.col, row=allocation.row, level="bottom" if allocation.y_position == 0 else "top")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Błąd komunikacji z drukarką (G-Code): {str(e)}")
 
