@@ -115,9 +115,10 @@ class GCodeService:
     #  WYSYŁANIE KOMEND G-CODE
     # ──────────────────────────────────────────────
 
-    def send_command(self, cmd: str, wait_for_ok: bool = True, timeout: float = 60.0) -> str:
+    def send_command(self, cmd: str, wait_for_ok: bool = True, timeout: float = 60.0, flush_before: bool = False) -> str:
         """
         Wysyła jedną komendę G-code i czeka na potwierdzenie 'ok'.
+        flush_before=True czyści bufor wejściowy przed wysłaniem (ważne dla M114 po asynchronicznym JOG).
         """
         if not self.is_connected:
             logger.warning("Drukarka nie jest podłączona. Automatyczne łaczenie...")
@@ -133,6 +134,10 @@ class GCodeService:
             cmd = cmd[:cmd.index(";")].strip()
 
         with self._serial_lock:
+            if flush_before and self._serial.in_waiting:
+                logger.debug("Flushing Input Buffer before command...")
+                self._serial.reset_input_buffer()
+
             logger.debug(f"TX: {cmd}")
             self._serial.write(f"{cmd}\n".encode("utf-8"))
             
@@ -385,7 +390,8 @@ class GCodeService:
     def _get_current_position(self) -> tuple[float, float, float]:
         """Odczytuje aktualne XYZ z M114. Zwraca (x, y, z) lub rzuca wyjątkiem."""
         import re
-        resp = self.send_command("M114")
+        # Czyścimy bufor, bo po szybkim Jogu (wait_for_ok=False) mogą tam wisieć stare 'ok'
+        resp = self.send_command("M114", flush_before=True)
         match_x = re.search(r'X:([-+]?\d*\.\d+|\d+)', resp)
         match_y = re.search(r'Y:([-+]?\d*\.\d+|\d+)', resp)
         match_z = re.search(r'Z:([-+]?\d*\.\d+|\d+)', resp)
