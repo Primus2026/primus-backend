@@ -371,15 +371,12 @@ class GCodeService:
             logger.warning(f"Ostrzeżenie: M114 parsing failed ({e}). Puszczam ruch na ryzyko operatora.")
             self._invalidate_virtual_pos()
 
-        # Wysyłamy do bufora (wait_for_ok=True oznacza, że drukarka potwierdza zapis do kolejki, to ułamek sekundy)
-        cmds = [
-            "G91",  # Tryb relatywny
-            f"G1 X{dx} Y{dy} Z{dz} F{speed or self.SPEED_XY}",
-            "G90",  # Powrót do trybu absolutnego
-        ]
-        
-        res = "\n".join(self.send_commands(cmds))
-        return res
+        # Fire-and-forget: wrzucamy do bufora lookahead drukarki (Marlin planuje płynnie)
+        # NIE czekamy na ACK (wait_for_ok=False), eliminuje ~150-300ms pauzy między krokami
+        self.send_command("G91", wait_for_ok=False)
+        self.send_command(f"G1 X{dx} Y{dy} Z{dz} F{speed or self.SPEED_XY}", wait_for_ok=False)
+        self.send_command("G90", wait_for_ok=False)
+        return "ok"
 
     # ──────────────────────────────────────────────
     #  JOYSTICK ACTION (Pick/Place z aktualnej pozycji)

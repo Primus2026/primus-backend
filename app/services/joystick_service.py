@@ -2,7 +2,6 @@ import threading
 import time
 import logging
 from typing import Optional
-from app.core.config import settings
 from app.services.gcode_service import gcode
 
 logger = logging.getLogger("JoystickService")
@@ -22,93 +21,101 @@ class JoystickService:
         return cls._instance
 
     def _init(self):
-        self.last_move_time = 0
-        self.move_interval = 0.08  # Fast response (12.5 Hz)
-        self.step_mm = 5.0
+        self.step_mm = 3.0           # Smaller step = smoother motion
         
-        # Debounce
+        # Pick/Place toggle state
+        self.is_holding = False      # True = magnet is ON (holding a piece)
+        
+        # Debounce for hold button
         self.last_action_time = 0
-        self.action_debounce = 1.5 
+        self.action_debounce = 1.5
         
-        self.is_jogging = False
+        # Lock only during actual pick/place execution - NOT during jogging 
+        self.is_executing_action = False
         
-        self.status_msg = "Gotowy (Tryb WiFi + Simulation Mode)"
+        self.status_msg = "Gotowy (Tryb WiFi)"
 
     def report_state(self, x: int, y: int, hold: int):
         """Called by API when ESP32 sends a WiFi report."""
         
-        # 1. Action Validation (HOLD button)
+        # 1. Action validation (HOLD button press) - toggle pick/place
         if hold == 1:
-            self._trigger_gcode_action("pick")
+            self._trigger_toggle_action()
+            return
+
+        # Block jog commands while pick/place is executing
+        if self.is_executing_action:
             return
 
         # 2. X and Y Analysis
         CENTER = 2048
         THRESHOLD = 800
         
-        dx = 0
-        dy = 0
+        dx = 0.0
+        dy = 0.0
         
         if x < (CENTER - THRESHOLD):
             dx = -self.step_mm
         elif x > (CENTER + THRESHOLD):
             dx = self.step_mm
             
-        # Orientation fix: Y < center is "Up" (away from operator) -> +dy
+        # Orientation: Y < center = away from operator = +dy in machine coords
         if y < (CENTER - THRESHOLD):
             dy = self.step_mm
         elif y > (CENTER + THRESHOLD):
             dy = -self.step_mm
             
-        if (dx != 0 or dy != 0):
+        if dx != 0 or dy != 0:
             self._send_jog(dx, dy)
 
     def _send_jog(self, dx: float, dy: float):
-        """Sends movement command via safe jog logic."""
-        if self.is_jogging:
-            # Drop the frame if the system is still confirming the previous move
-            return
-            
-        logger.info(f"WiFi-Joystick Ruch: dx={dx}, dy={dy}")
-        
-        # Spin up a thread to run the blocking gcode.jog
+        """Fire-and-forget jog - no blocking, no lock. Printer lookahead buffer handles queuing."""
+        logger.info(f"Jog: dx={dx}, dy={dy}")
         threading.Thread(target=self._run_jog_safe, args=(dx, dy), daemon=True).start()
 
     def _run_jog_safe(self, dx: float, dy: float):
         try:
-            self.is_jogging = True
             gcode.jog(dx, dy, 0)
         except ValueError as ve:
-             # Limitatory bezpieczeństwa z gcode_service złapały błąd
-             logger.warning(f"BLOKADA JOG: {ve}")
+            logger.warning(f"BLOKADA JOG: {ve}")
         except Exception as e:
             logger.error(f"GCode Jog ERROR: {e}")
-        finally:
-            self.is_jogging = False
 
-    def _trigger_gcode_action(self, action_type: str):
+    def _trigger_toggle_action(self):
+        """Toggle between pick and place on button press."""
         now = time.time()
         if now - self.last_action_time < self.action_debounce:
+            logger.debug("Debounce - ignoruję kliknięcie.")
             return
-            
         self.last_action_time = now
-        logger.info(f"Otrzymano WiFi-Trigger: {action_type}.")
         
-        threading.Thread(target=self._run_action_safe, args=(action_type,), daemon=True).start()
+        # Toggle state
+        self.is_holding = not self.is_holding
+        action = "pick" if self.is_holding else "place"
+        logger.info(f"Przycisk HOLD → {action.upper()} (is_holding={self.is_holding})")
         
+        threading.Thread(target=self._run_action_safe, args=(action,), daemon=True).start()
+
     def _run_action_safe(self, action_type: str):
         try:
-            self.is_jogging = True
+            self.is_executing_action = True
             gcode.joystick_action(action_type)
+            logger.info(f"Zakończono: {action_type}")
         except Exception as e:
-            logger.error(f"Błąd akcji: {e}")
+            logger.error(f"Błąd akcji {action_type}: {e}")
+            # Revert toggle on failure to keep state consistent
+            if action_type == "pick":
+                self.is_holding = False
+            else:
+                self.is_holding = True
         finally:
-            self.is_jogging = False
+            self.is_executing_action = False
 
     def get_status(self) -> dict:
         return {
             "mode": "WiFi (HTTP POST /report)",
-            "last_move": self.last_move_time,
+            "is_holding": self.is_holding,
+            "is_executing": self.is_executing_action,
             "message": self.status_msg,
             "printer_connected": gcode.is_connected
         }
