@@ -101,13 +101,18 @@ class JoystickService:
             self.is_executing_action = True
             gcode.joystick_action(action_type)
             logger.info(f"Zakończono: {action_type}")
+        except ConnectionError:
+            # Drukarka niepodłączona - NIE cofamy toggle stanu, operacja zostanie
+            # powtórzona gdy drukarka się połączy (stan logiczny pozostaje spójny)
+            logger.warning(f"Drukarka niepodłączona - akcja '{action_type}' pominięta. Stan is_holding={self.is_holding} zachowany.")
         except Exception as e:
             logger.error(f"Błąd akcji {action_type}: {e}")
-            # Revert toggle on failure to keep state consistent
+            # Cofnij toggle TYLKO przy realnym błędzie wykonania (nie przy braku połączenia)
             if action_type == "pick":
                 self.is_holding = False
             else:
                 self.is_holding = True
+            logger.warning(f"Stan is_holding cofnięty do {self.is_holding} z powodu błędu.")
         finally:
             self.is_executing_action = False
 
