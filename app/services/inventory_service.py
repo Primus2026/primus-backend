@@ -1,57 +1,52 @@
 import logging
 import asyncio
+from datetime import datetime
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload 
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.database.models.stock_item import StockItem
 from app.database.models.rack import Rack
 from app.database.models.product_definition import ProductDefinition
 from app.services.camera_service import camera
 from app.services.gcode_service import gcode
 from app.services.product_stats_service import ProductStatsService
-from datetime import datetime
 
 logger = logging.getLogger("InventoryService")
 
 class InventoryService:
     @staticmethod
     async def audit_inventory(db: AsyncSession):
-        """
-        Etap 2: Porównanie stanu faktycznego z bazą danych bez wprowadzania zmian.
-        Zwraca szczegółowy raport rozbieżności dla każdego pola.
-        """
-        # 1. Pobierz regał PRINTER_3D
         result = await db.execute(select(Rack).where(Rack.designation == "PRINTER_3D"))
         rack = result.scalars().first()
         if not rack:
             return {"status": "error", "message": "Rack PRINTER_3D not found"}
 
-        # 2. Pobierz aktualny stan bazy dla tego regału
+        # Pobieramy wszystko z bazy
         stmt = select(StockItem).where(StockItem.rack_id == rack.id).options(selectinload(StockItem.product))
         db_items_result = await db.execute(stmt)
         db_items = db_items_result.scalars().all()
         
-        # Mapa bazy danych dla szybkiego dostępu: (row, col) -> StockItem
+        # Mapa: (db_row, col) -> StockItem
         db_map = {(item.position_row, item.position_col): item for item in db_items}
 
         report = []
         gcode.home()
 
-        # 3. Pętla skanowania (Rzędy 2-8, Kolumny 1-8) - Wężykiem
         for row in range(2, 9):
             columns = range(1, 9) if row % 2 != 0 else range(8, 0, -1)
             for col in columns:
                 gcode.move_camera_to_grid(col=col, row=row)
                 await asyncio.sleep(0.6)
 
-                # Detekcja fizyczna
                 detected_barcode = camera.decode_qr() or camera.recognize_pictogram()
                 
-                # Pobranie danych z bazy dla tego slotu
-                db_item = db_map.get((row, col))
+                # POPRAWIONE: Dopasowanie fizycznego skanu (2-8) do rekordu w bazie (1-7)
+                db_item = db_map.get((row - 1, col))
                 db_barcode = db_item.product.barcode if db_item else None
 
                 slot_status = {
-                    "row": row,
+                    "row": row, # Fizyczny rząd dla frontendu
                     "col": col,
                     "db_barcode": db_barcode,
                     "physical_barcode": detected_barcode,
@@ -59,26 +54,17 @@ class InventoryService:
                     "error_message": None
                 }
 
-                # LOGIKA PORÓWNAWCZA
                 if not detected_barcode and not db_barcode:
-                    # Pusto tu i tu - OK
                     slot_status["error_message"] = "Puste"
-                
                 elif detected_barcode and not db_barcode:
-                    # Jest na planszy, nie ma w bazie
                     slot_status["is_correct"] = False
                     slot_status["error_message"] = f"Nadmiar: Wykryto {detected_barcode}, brak w systemie"
-                
                 elif not detected_barcode and db_barcode:
-                    # Jest w bazie, nie ma na planszy
                     slot_status["is_correct"] = False
                     slot_status["error_message"] = f"Brak: System widzi {db_barcode}, pole jest puste"
-                
                 elif detected_barcode != db_barcode:
-                    # Inna figura na miejscu
                     slot_status["is_correct"] = False
                     slot_status["error_message"] = f"Mismatch: System: {db_barcode}, Fizycznie: {detected_barcode}"
-                
                 else:
                     slot_status["error_message"] = "Zgodne"
 
