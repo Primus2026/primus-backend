@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     auth, users, rack_CRUD, product_definition_CRUD, 
     reports, stock_outbound, ai, stock, stock_inbound, 
 
-    alerts, backups, voice, camera, gcode, joystick, qr_generator, inventory, chess
+    alerts, backups, voice, camera, gcode, joystick, qr_generator, inventory, chess, ttt
 
 )
 
@@ -33,4 +33,4 @@ api_router.include_router(qr_generator.router, prefix="/qr_generator", tags=["QR
 
 api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_router.include_router(chess.router, prefix="/chess", tags=["Chess Mode"])
-
+api_router.include_router(ttt.router, prefix="/ttt", tags=["Tic Tac Toe"])
